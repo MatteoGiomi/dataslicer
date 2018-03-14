@@ -1,9 +1,12 @@
 # build stuff
 /__pycache__/
+/build/
+/dist/
+/dataslicer.egg-info/
 
-# test data
+# test data & scripts
 /testdata/
 test.py
 
-# old / deprecated
+# old & deprecated
 /scraps/
