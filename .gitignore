@@ -1,0 +1,9 @@
+# build stuff
+/__pycache__/
+
+# test data
+/testdata/
+test.py
+
+# old / deprecated
+/scraps/
