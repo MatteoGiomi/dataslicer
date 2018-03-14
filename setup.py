@@ -17,7 +17,6 @@ setup(
     author='Matteo Giomi',
     author_email='matteo.giomi@desy.de',
     packages=['dataslicer'],
-#    url = 'https://github.com/MatteoGiomi/extcats',
-#    download_url = 'https://github.com/MatteoGiomi/extcats/archive/1.3.tar.gz',
+    url = 'https://github.com/MatteoGiomi/dataslicer',
     install_requires=['pandas', 'sklearn', 'extcats', 'astropy'],
     )
