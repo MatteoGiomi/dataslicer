@@ -22,12 +22,14 @@ class metadata(dataset_base):
         """
         """
         self._to_csv(tag = 'metadata', **args)
-    
+
+
     def read_csv(self, **args):
         """
         """
         self._read_csv(tag = 'metadata', **args)
-    
+
+
     def load_header_meta(self, header_keys = None, **getheader_args):
         """
             go and read the header of the fits files and create a 
@@ -79,7 +81,7 @@ class metadata(dataset_base):
         self.df['OBSID'] = (
                     self.df['EXPID'].astype(str) + 
                     self.df['RCID'].astype(str) ).astype(int)
-        self.df.set_index('OBSID', inplace = True, drop = False)
+#        self.df.set_index('OBSID', inplace = True, drop = False)
         self.logger.info("loaded meta data from fits headers for %d files into metadata dataframe."%len(self.df))
 
 

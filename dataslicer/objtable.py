@@ -77,6 +77,50 @@ class objtable(dataset_base):
         self._read_csv(tag = 'tabledata', **args)
 
 
+    def apply_zp(self, metadata, zp_col_name = 'MAGZP', mag_col = 'MAG_AUTO', 
+        zp_mag_col = None, join_on = 'OBSID'):
+        """
+            apply ZP from the fits header stored in 
+            the metadata to the specified magnitude.
+            
+            Parameters:
+            -----------
+            
+                metadata: `pandas.DataFrame` or None
+                    dataframe with the metadata for the files you want to load. 
+                    If None, all the files in this object self.files attribute will be used.
+                
+                zp_col_name: `str`
+                    name of metadata column containing the zero point.
+                
+                mag_col: `str`
+                    name of this object dataframe colum you want to apply the ZP to.
+                
+                zp_mag_col: `str`
+                    name of the colum that will contain the zp corrected magnitude.
+                    If None, it will default to 'ZPC_'+mag_col
+                
+                join_on: `str`
+                    name of the column used to join the metadata and source data.
+        """
+        
+        # check you have everything you need
+        self._check_for_df()
+        if (not join_on in self.df.columns):
+            raise KeyError("Join on column %s not present in objtable dataframe"%join_on)
+        if (not join_on in metadata.columns):
+            raise KeyError("Join on column %s not present in metadata dataframe"%join_on)
+        
+        self.logger.info("Applying ZP correction to %s. Results will be parsed in %s"%
+            (mag_col, zp_mag_col))
+        self.df[zp_mag_col] = (
+                    self.df[mag_col] + 
+                    metadata[metadata[join_on] == self.df[join_on]][zp_col_name])
+        
+    def add_objd(self, metadata):
+        pass
+
+
     def load_data(self, target_metadata_df = None, add_obs_id = True, **fits_to_df_args):
         """
             load the data contained into the files and corresponding to the given
@@ -118,14 +162,16 @@ class objtable(dataset_base):
         # create the big dataframe
         true_args = select_kwargs(fits_to_df, **fits_to_df_args)
         start = time.time()
-        if (not add_obs_id) or (target_metadata_df is None):
+        if target_metadata_df is None:
             frames  = [fits_to_df(ff, **true_args) for ff in tqdm.tqdm(files)]
         else:
             frames = []
             for ff in tqdm.tqdm(files):
                 buff = fits_to_df(ff, **true_args)
-                obsid = target_metadata_df[target_metadata_df['PATH'] == ff]['OBSID']#.iloc[0]
-                buff['OBSID'] = obsid
+                if add_obs_id:
+                    obsid = target_metadata_df[
+                        target_metadata_df['PATH'] == ff]['OBSID'].values[0]
+                    buff['OBSID'] = pd.Series( [obsid]*len(buff), dtype = int)
                 frames.append(buff)
         self.df = pd.concat(frames)
         end = time.time()
@@ -180,7 +226,7 @@ class objtable(dataset_base):
             self.df = clean_df
         
         # group the dataframe
-        self.gdf = clean_df.groupby('clusterID')
+        self.gdf = clean_df.groupby('clusterID', sort = False)
         self.logger.info(
             "found %d clusters with maximum size of %.2f arcsec and minimum number of entries: %d"%
             (len(self.gdf), cluster_size_arcsec, min_samples))
@@ -207,7 +253,7 @@ class objtable(dataset_base):
             Returns:
             --------
                 
-                average ra, average dec of each group as array.
+                average_ra, average_dec of each group as array.
         """
         
         if wav is True:
@@ -215,8 +261,17 @@ class objtable(dataset_base):
         
         if not hasattr(self, 'gdf'):
             raise AttributeError("this object has no grouped dataframe.")
-            
         return (self.gdf[xname].mean(), self.gdf[yname].mean())
+
+
+    def get_cluster_sizes(self):
+        """
+            return a list of the size of each cluster in this object
+            grouped dataframe.
+        """
+        if not hasattr(self, 'gdf'):
+            raise AttributeError("this object has no grouped dataframe.")
+        return [len(group) for _, group in self.gdf]
 
 
     def match_to_PS1cal(self, min_samples = 0, 
@@ -251,6 +306,10 @@ class objtable(dataset_base):
                 ps1cals, table with all te PS1 calibrators pertaining to the dataset.
             """
             
+            logging.info("matching objtable entries to PS1 calibrator stars")
+            logging.info("using %s, %s as coordinates and a search radius of %.2f arcsec"%(
+                xname, yname, sep))
+            
             # initialize the catalog query object
             ps1cal_query = CatalogQuery.CatalogQuery(
                 'ps1cal', 'ra', 'dec', dbclient = dbclient, logger = self.logger)
@@ -264,19 +323,7 @@ class objtable(dataset_base):
                         rs_arcsec = sep, method = 'healpix')
                     if ps1match != (None, None):
                         pass
-                        
-                    
-                    
             
-#            logging.info("matching %d table entries to PS1 calibrator stars"%len(self.tab))
-#            logging.info("using %s, %s as coordinates and a search radius of %.2f arcsec"%(
-#                xname, yname, sep.to('arcsec').value))
+            # TODO: field & RC based matching in case yuor obs falls on the regular grids.
             
             
-            
-            # do the matching source by source
-#            logging.info("matching objects with the PS1 calibrators")
-#            for isrc in tqdm.tqdm(range(len(self.tab))):
-#                ps1match = ps1cal_query.findclosest(
-#                    ra = self.tab[xname][isrc], dec = self.tab[yname][isrc], 
-#                    rs_arcsec = sep.to('arcsec').value, method = 'healpix')

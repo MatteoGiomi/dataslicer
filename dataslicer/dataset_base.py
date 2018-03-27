@@ -170,8 +170,12 @@ class dataset_base():
         self._check_for_df()
         if not 'inplace' in dfquery_args.keys():
             dfquery_args['inplace'] = True
+        
+        # select valid kwargs
         true_args = select_kwargs(pd.DataFrame.query, **dfquery_args)
-        if 'expr' in true_args.keys():
-            return self.df.query(**true_args)
-        else:
+        self.logger.info("quering dataframe with: %s"%true_args['expr'])
+        qdf = self.df.query(**true_args)
+        if dfquery_args['inplace']:
             return self.df
+        else:
+            return qdf
