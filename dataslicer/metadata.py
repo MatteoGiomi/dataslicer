@@ -76,6 +76,12 @@ class metadata(dataset_base):
             row['PATH'] = fitsfile
             rows.append(row)
         self.df = pd.DataFrame.from_records(rows)
+
+        # check that you have all the keys you asked for
+        df_cols = self.df.columns.values.tolist()
+        for mk in magic_keys:
+            if not any([mk in key for key in df_cols]):
+                self.logger.warning("couldn't find requested key: %s in file headers."%mk)
         
         # add obsid column as unique identifier of the data product
         self.df['OBSID'] = (
