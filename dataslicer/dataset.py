@@ -160,14 +160,29 @@ class dataset(dataset_base):
         if metadata_cols is None:
             meta_2_join = self.metadata.df
         else:
+            for c in metadata_cols:
+                if c not in self.metadata.df.columns.tolist():
+                    self.logger.warning("Column %s not present in metadata df."%c)
             meta_2_join = self.metadata.df.ix[:, metadata_cols]
-        self.logger.info("Merging metadata with objtable sources. Column used: %s"%
-            (", ".join(meta_2_join.columns.values)))
         
         # join and go
         self.objtable.df = pd.merge(
                 self.objtable.df, meta_2_join, on = join_on)
-        print (self.objtable.df)
-        input()
-        
+        self.logger.info("Merged metadata with objtable sources. Columns used: %s"%
+            (", ".join(meta_2_join.columns.values)))
 
+
+    def select_objects(self, query):
+        """
+            discard objects from objtable if they don't satisfy the query
+            
+            Parameters:
+            -----------
+            
+                query: `str`
+                    query expression, see 
+                    https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.query.html 
+                    for syntax explanation.
+        """
+        self.objtable.query_df(expr = query)
+        

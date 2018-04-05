@@ -168,6 +168,8 @@ class dataset_base():
                 pandas.DataFrame with query results.
         """
         self._check_for_df()
+        
+        # add default
         if not 'inplace' in dfquery_args.keys():
             dfquery_args['inplace'] = True
         
