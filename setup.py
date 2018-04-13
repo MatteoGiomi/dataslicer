@@ -18,5 +18,5 @@ setup(
     author_email='matteo.giomi@desy.de',
     packages=['dataslicer'],
     url = 'https://github.com/MatteoGiomi/dataslicer',
-    install_requires=['pandas', 'sklearn', 'extcats', 'astropy'],
+    install_requires=['pandas', 'sklearn', 'extcats', 'astropy', 'jenkspy'],
     )

@@ -107,6 +107,18 @@ class dataset(dataset_base):
             raise RuntimeError("metadata dataframe is empty.")
 
 
+    def set_plot_dir(self, plot_dir):
+        """
+            set the path of the directory used to store diagnostic plots for 
+            both metdata and 
+        """
+        self._set_plot_dir(plot_dir)
+        if hasattr(self, 'metatdata'):
+            self.metadata._set_plot_dir(plot_dir)
+        if hasattr(self, 'objtable'):
+            self.objtable._set_plot_dir(plot_dir)
+
+
     def load_objtable(self, **args):
         """
             load the table data for this dataset eventually cut on metadata to select 

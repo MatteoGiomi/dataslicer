@@ -53,6 +53,49 @@ class dataset_base():
             self.logger.warning("no %s files found in %s"%(fext, datadir))
 
 
+    def _set_plot_dir(self, plot_dir):
+        """
+            set the path of the directory used to store diagnostic plots.
+            
+            Parameters:
+            -----------
+                
+                plot_dir: `str`
+                    path of the directory where diag plots will be saved. 
+                    It will be created if not existsing.
+        """
+        self.logger.info("diagnostic plots will be saved to %s"%(plot_dir))
+        if not os.path.isdir(plot_dir):
+            os.makedirs(plot_dir)
+        self.plot_dir = plot_dir
+
+
+    def save_fig(self, fig, name, **savefig_kwargs):
+        """
+            save a plot to plotdir/name If plotdir is not defined, save to
+            current directory.
+            
+            Parameters:
+                
+                fig: `matplotlib.figure.Figure`
+                    figure to be saved.
+                
+                name: `str`
+                    name of the plot.
+                
+                savefig_kwargs: `kwargs`
+                    passed to matplotlib.figure.Figure.savefig
+        """
+        
+        if not hasattr(self, 'plot_dir'):
+            logging.warning("plot directory not set for this object. Saving figure to current dir.")
+            pltdir = './'
+        else:
+            pltdir = self.plot_dir
+        filename = os.path.join(pltdir, name)
+        self.logger.info("saving plot to %s"%filename)
+        fig.savefig(filename, **savefig_kwargs)
+        
     def _to_csv(self, tag = None, fname = None, **to_csv_args):
         """
             save the metadata dataframe as a csv table.

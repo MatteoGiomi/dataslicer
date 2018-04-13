@@ -5,117 +5,42 @@
 # 
 # Author: M. Giomi (matteo.giomi@desy.de)
 
-import tqdm, time
+import time, tqdm
 import pandas as pd
 import numpy as np
 from sklearn.cluster import DBSCAN
-from astropy.io import fits
 
-from extcats import CatalogQuery
+import dataslicer.df_utils as df_utils
 from dataslicer.dataset_base import dataset_base, select_kwargs
 
 
-def fits_to_df(fitsfile, extension, columns = None, keep_array_cols = False):
-    """
-        load a table extension contained into a fits file into a pandas 
-        DataFrame.
-        
-        Parameters:
-        -----------
-            
-            fitsfile: `str`
-                valid path to the file you want to read.
-            
-            extension: `str` or `int`
-                extension to be read. This will be the second parameter
-                passed to astropy.io.fits.getdata
-            
-            columns: `list`
-                list of column names to be read from the files. If None, 
-                all the columns will be read.
-            
-            keep_array_cols: `bool`
-                if True and array columns are present in the fits table,
-                they will be converted and included in the dataframe.
-        
-        Returns:
-        --------
-            
-            pandas.DataFrame with the content of the table extension of the fitsfile.
-    """
-    data = fits.getdata(fitsfile, extension)
-    datadict = {}
-    for dc in data.columns:
-        if not columns is None and ( not any([uc.replace("*", "") in dc.name for uc in columns]) ):
-            continue
-        if int(dc.format[0]) > 1:
-            if not keep_array_cols:
-                continue
-            else:
-                datadict[dc.name] = data[dc.name].byteswap().newbyteorder().tolist()
-        else:
-            datadict[dc.name] = data[dc.name].byteswap().newbyteorder()
-    return pd.DataFrame(datadict)
+# this class is getting huge, should try somethig like:
+# http://www.qtrac.eu/pyclassmulti.html
+#
+# OR, EVEN BETTER:
+# https://groups.google.com/forum/?hl=en#!topic/comp.lang.python/goLBrqcozNY
+# sooner or later.
 
+# here the hefty pieces of codes are kept
+from dataslicer._objtable_methods import _objtable_methods
 
-class objtable(dataset_base):
+class objtable(dataset_base, _objtable_methods):
     """
         class to collect and manage the tablular data of 
         a given dataset into a dataframe.
     """
 
-
     def to_csv(self, **args):
-        """
-        """
         self._to_csv(tag = 'tabledata', **args)
 
 
     def read_csv(self, **args):
-        """
-        """
         self._read_csv(tag = 'tabledata', **args)
 
 
-    def apply_zp(self, metadata, zp_col_name = 'MAGZP', mag_col = 'MAG_AUTO', 
-        zp_mag_col = None, join_on = 'OBSID'):
-        """
-            apply ZP from the fits header stored in 
-            the metadata to the specified magnitude.
-            
-            Parameters:
-            -----------
-            
-                metadata: `pandas.DataFrame` or None
-                    dataframe with the metadata for the files you want to load. 
-                    If None, all the files in this object self.files attribute will be used.
-                
-                zp_col_name: `str`
-                    name of metadata column containing the zero point.
-                
-                mag_col: `str`
-                    name of this object dataframe colum you want to apply the ZP to.
-                
-                zp_mag_col: `str`
-                    name of the colum that will contain the zp corrected magnitude.
-                    If None, it will default to 'ZPC_'+mag_col
-                
-                join_on: `str`
-                    name of the column used to join the metadata and source data.
-        """
-        
-        # check you have everything you need
-        self._check_for_df()
-        if (not join_on in self.df.columns):
-            raise KeyError("Join on column %s not present in objtable dataframe"%join_on)
-        if (not join_on in metadata.columns):
-            raise KeyError("Join on column %s not present in metadata dataframe"%join_on)
-        
-        self.logger.info("Applying ZP correction to %s. Results will be parsed in %s"%
-            (mag_col, zp_mag_col))
-        self.df[zp_mag_col] = (
-                    self.df[mag_col] + 
-                    metadata[metadata[join_on] == self.df[join_on]][zp_col_name])
+    def _check_for_gdf(self):
+        if not hasattr(self, 'gdf'):
+            raise AttributeError("this object has no grouped dataframe.")
 
 
     def load_data(self, target_metadata_df = None, add_obs_id = True, **fits_to_df_args):
@@ -157,14 +82,14 @@ class objtable(dataset_base):
             raise RuntimeError("found no file to load.")
         
         # create the big dataframe
-        true_args = select_kwargs(fits_to_df, **fits_to_df_args)
+        true_args = select_kwargs(df_utils.fits_to_df, **fits_to_df_args)
         start = time.time()
         if target_metadata_df is None:
-            frames  = [fits_to_df(ff, **true_args) for ff in tqdm.tqdm(files)]
+            frames  = [df_utils.fits_to_df(ff, **true_args) for ff in tqdm.tqdm(files)]
         else:
             frames = []
             for ff in tqdm.tqdm(files):
-                buff = fits_to_df(ff, **true_args)
+                buff = df_utils.fits_to_df(ff, **true_args)
                 if add_obs_id:
                     obsid = target_metadata_df[
                         target_metadata_df['PATH'] == ff]['OBSID'].values[0]
@@ -176,8 +101,7 @@ class objtable(dataset_base):
             (len(files), len(self.df), (end-start)))
 
 
-    def cluster_sources(self, cluster_size_arcsec, min_samples,
-                xname = 'ALPHAWIN_J2000', yname = 'DELTAWIN_J2000', purge_df = False):
+    def cluster_sources(self, cluster_size_arcsec, min_samples, xname, yname, n_jobs = 2, purge_df = False):
         """
             cluster the data in this object dataframe depending on 
             their position. It uses the DBSCAN algorithm to get the job done.
@@ -198,6 +122,9 @@ class objtable(dataset_base):
                 x[/y]name: `str`
                     name of df columns specifiyng the x,y coordinates to use.
                 
+                n_jobs: `int`
+                    The number of parallel jobs to run. If -1 use all CPUs.
+                
                 purge_df: `bool`
                     if True, points which are not in a retained cluster (with more than
                     min_samples) are removed from the dataframe.
@@ -214,7 +141,7 @@ class objtable(dataset_base):
         db = DBSCAN(
             eps = np.radians(cluster_size_arcsec / 3600.),
             min_samples= min_samples,
-            algorithm='ball_tree', metric='haversine').fit(np.radians(coords))
+            algorithm='ball_tree', metric='haversine', n_jobs = n_jobs).fit(np.radians(coords))
         
         # tag each source and remove noisy clusters (that is, with size smaller than minoccur)
         self.df['clusterID'] = db.labels_
@@ -229,7 +156,7 @@ class objtable(dataset_base):
             (len(self.gdf), cluster_size_arcsec, min_samples))
 
 
-    def compute_cluster_centroid(self, xname = 'ALPHAWIN_J2000', yname = 'DELTAWIN_J2000', 
+    def compute_cluster_centroid(self, xname, yname, 
         wav = False, xerr = None, yerr = None):
         """
             compute the average position of each cluster centroid. 
@@ -255,162 +182,145 @@ class objtable(dataset_base):
         
         if wav is True:
             raise NotImplementedError("cluster centroid with weighted average not implemented yet.")
-        
-        if not hasattr(self, 'gdf'):
-            raise AttributeError("this object has no grouped dataframe.")
+        self._check_for_gdf()
         return (self.gdf[xname].mean(), self.gdf[yname].mean())
 
 
-    def get_cluster_sizes(self):
+    def calmag(self, mag_col, err_mag_col, calmag_col = None, zp_name = 'MAGZP', 
+        clrcoeff_name = 'CLRCOEFF', zp_err = 'MAGZPUNC', clrcoeff_err = 'CLRCOUNC',
+        ps1_color1 = None, ps1_color2 = None, dropmag = False):
         """
-            return a list of the size of each cluster in this object
-            grouped dataframe.
+            apply photometric calibration to magnitude. The formula used is
+            
+            
+            Mcal = Minst + ZP_f + c_f*(M1_PS1 -M2_PS1)
+            
+            where Minst is the instrumental magnitude, ZP_f , c_f are the image-wise
+            zero point and color coefficient (MAGZP,CLRCOEFF), and (M1_PS1-M2_PS1)
+            is the color of the source in the PS1 system. The filter used are defined
+            by the header key PCOLOR.
+            
+            IMPORTANT: the above formula can be applied ONLY to PSF-fit catalogs.
+            
+            Parameters:
+            -----------
+            
+                mag_col: `str`
+                    name of the magnitude column you want to calibrate.
+                
+                err_mag_col: `str` or None
+                    name of the columns containing the error on mag_col. If None, 
+                    error on the calibrated magnitudes will not be computed. 
+                
+                calmag_col/err_mag_col: `str` or None
+                    name of the column in the dataframe which will host the
+                    calibrated magnitude value and its error. If None the name will 
+                    be cal_+magname and err_cal_+magname
+                
+                zp_name/clrcoeff_name: `str`
+                    name of ZP and color coefficient term. If clrcoeff_name is None, 
+                    color correction will be ignored.
+                
+                zp_err/clrcoeff_err: `str`
+                    name of columns containing the error on the ZP and color coefficient.
+                
+                ps1_color1[2]: `str` or array-like
+                    If strings, these are the names of the PS1cal magnitudes used
+                    to calibrate (they should be consistent with PCOLOR).
+                    If array-like they should have the same length of the dataframe.
+                
+                dropmag: `bool`
+                    if True the df column magname will be dropped.
+                    
         """
-        if not hasattr(self, 'gdf'):
-            raise AttributeError("this object has no grouped dataframe.")
-        return [len(group) for _, group in self.gdf]
+        
+        self.logger.info("Applying photometric calibration.")
+        
+        # see what columns are needed
+        needed_cols = [mag_col, zp_name]
+        if clrcoeff_name is None:
+            self.logger.warning("color correction will not be applied")
+        else:
+            needed_cols.extend([clrcoeff_name])
+            if type(ps1_color1) == str and type(ps1_color2) == str:
+                needed_cols.extend([ps1_color1, ps1_color2])
+        if not err_mag_col is None:
+            needed_cols.extend([zp_err, clrcoeff_err, err_mag_col])
+        
+        df_utils.check_col(needed_cols, self.df)
+        for k in needed_cols:
+            df_utils.check_col(k, self.df)
+        
+        # name the cal mag column and the one for the error
+        if calmag_col is None:
+            calmag_col = "cal_"+mag_col
+        err_calmag_col = "err_"+calmag_col
+        
+        # fill them
+        if clrcoeff_name is None:
+            self.df[calmag_col] = self.df[mag_col] + self.df[zp_name]
+            if not err_mag_col is None:
+                self.df[err_calmag_col] = np.sqrt(
+                                    self.df[err_mag_col]**2. +
+                                    self.df[zp_err]**2.)
+        else:
+            self.df[calmag_col] = (
+                self.df[mag_col] + 
+                self.df[zp_name] +
+                self.df[clrcoeff_name]*(self.df[ps1_color1] - self.df[ps1_color2])
+                                   )
+            if not err_mag_col is None:
+                self.df[err_calmag_col] = np.sqrt(
+                    self.df[err_mag_col]**2. +
+                    self.df[zp_err]**2. +
+#                    (self.df[clrcoeff_err] * (self.df[ps1_color1] - self.df[ps1_color2]))**2. + 
+                    (self.df[clrcoeff_name]**2) * (self.df['e_'+ps1_color1]**2. + self.df['e_'+ps1_color2]**2.)
+                                                  )
+        
+        # eventually get rid of the uncalibrated stuff
+        if dropmag:
+            logging.info("dropping non calibrated magnitude %s from dataframe"%mag_col)
+            self.df.drop(columns = [mag_col])
 
 
-    def match_to_PS1cal(self, rs_arcsec, use_clusters, clean_non_matches = True,
-            xname = 'ALPHAWIN_J2000', yname = 'DELTAWIN_J2000', 
-            col2rm = ['rcid', 'field', '_id', 'hpxid_16'], dbclient = None): 
-            """
-                Match the sources in the objtable to the PS1 calibrator stars. To each
-                row in the dataframe the catalog entry of the found PS1 cp is added.
-                
-                Use the extcats package to do the matching. For this, the PS1 calibrators
-                have to be arranged in a mongo database.
-                
-                Parameters:
-                -----------
-                     
-                    rs_arcsec: `float`
-                        search radius, in arcseconds for matching with the PS1 calibrators.
-                    
-                    use_clusters: `bool`
-                        if True, match each of this object clusters to the calibrators, rather
-                        than individual sources. In this case, the cluster centroid position is 
-                        used. 
-                        If False, the matching will try to use FIELDID and RCID to speed up the query.
-                        If this information is not included in this object dataframe, or if the 
-                        fields are not the 'standard' ones, the matching will be done source by source.
-                     
-                     clean_non_matches: `bool`
-                        if True, sources with no match in the PS1cal db are removed.
-                     
-                    x[/y]name: `str`
-                        name for table columns specifiyng the x,y (Equatorial, J2000) coordinates to use.
-                    
-                    col2rm: `list`
-                        names of columns in the PS1 calibrator catalogs to be excluded from the
-                        resulting dataframe.
-                    
-                    dbclient: `pymongo.MongoClient`
-                        pymongo client that manages the PS1 calibrators databae.
-                        This is passed to extcats CatalogQuery object.
-            """
+    def cluster_op(self, col, function):
+        """
+            apply a function to each cluster group in this dataframe and 
+            return a dataframe with the results.
             
-            self.logger.info("matching objtable entries to PS1 calibrator stars")
-            self.logger.info("using %s, %s as coordinates and a search radius of %.2f arcsec"%(
-                xname, yname, rs_arcsec))
+            Parameters:
+            -----------
             
-            # initialize the catalog query object and grab the database
-            ps1cal_query = CatalogQuery.CatalogQuery(
-                'ps1cal', 'ra', 'dec', dbclient = dbclient, logger = self.logger)
+                col: `str`
+                    name of the column on which the operation is to be performed.
+                
+                op: `callable` or `str`
+                    the function to be applied to the desired column of each group.
+                    Must reuturn a dictionary so that the results can be parsed into
+                    another dataframe. If string, it can be used to select functions
+                    from the df_utils module.
+                    
             
-            # gather the found counterparts into a list of dictionary
-            ps1cps = []
-            if use_clusters:
-                self.logger.info("Matching cluster centroids with the PS1 calibrators")
-                av_x, av_y = self.compute_cluster_centroid(xname, yname)
+            Returns:
+            --------
                 
-                # search cp for each cluster centroid
-                for icl, grp in tqdm.tqdm(self.gdf):
-                    ps1match =  ps1cal_query.findclosest(ra = av_x[icl], dec = av_y[icl], 
-                        rs_arcsec = rs_arcsec, method = 'healpix')
-                    
-                    # if you have a cp, add it to the list
-                    if ps1match != (None, None):
-                        buff = {}
-                        for c in ps1match[0].colnames:
-                            if (not col2rm is None) and (c not in col2rm):     # remove unwanted columns
-                                buff[c] = ps1match[0][c]
-                        buff['dist2ps1'] = ps1match[1]
-                        buff['clusterID'] = icl        # this will be used to join the df
-                        ps1cps.append(buff)
-                
-                # merge the dataframe
-                self.df = self.df.merge(pd.DataFrame(ps1cps), on = 'clusterID', how='left')
-                
-                # if requested, drop sources without PS1cp
-                if clean_non_matches:
-                    print ("jackancanckanca", len(self.df))
-                    self.df.dropna(subset = ['dist2ps1'], inplace = True)
-                    self.logger.info("dropping sources without match in PS1cal DB: %d retained."%
-                        (len(self.df)))
-                self.logger.info("Created dataframe with PS1 calibrators for %d clusters"%
-                    (len(ps1cps)))
-            else:
-                raise NotImplementedError("matching based on field / rc not fully implemeted yet.") # TODO
-                # if you have the field & RC id for every object, use them if possible.
-                dfcols = self.df.columns.tolist()
-                if 'FIELDID' in dfcols and 'RCID' in dfcols:
-                    self.logger.info(
-                    "Matching source by sources using FIELDID and RC information")
-                    
-                    fields = self.df.FIELDID.unique().astype(int).tolist()
-                    rcids = self.df.RCID.unique().astype(int).tolist()
-                    self.logger.info("found objtable sources for %d fields and %d RCs."%
-                        (len(fields), len(rcids)))
-                    
-                    # get the ones you have in the catalog:
-                    ps1cal_fields = ps1cal_query.src_coll.distinct('field')
-                    self.logger.info("PS1 calibrator database is indexed in %d fields"%
-                        (len(ps1cal_fields)))
-                    
-                    # see if the fields in the objtable are also in the database
-                    if all([ff in ps1cal_fields for ff in fields]):
-                        pass
-#                        #fields = [246, 247, 248]
-#                        #rcids = [38, 55]
-#                        # get the coordinates of all the calibrators for those fields
-#                        ps1srcs = [src for src in ps1cal_query.src_coll.find(
-#                            {'field': { "$in": fields}, 'rcid': {'$in': rcids}},
-#                            { '_id': 1, 'ra': 1, 'dec': 1 })]
-##                        # match the object by coordinates: 
-##                        # first find the closest calibrator for each object
-##                        coords = SkyCoord(self.tab[xname], self.tab[yname], **skycoords_kwargs)
-##                        ps1coords = SkyCoord(
-##                            ra = ps1cals['ra']*u.deg, dec = ps1cals['dec']*u.deg, **PS1skycoords_kwargs)
-##                        idps1, d2ps1, _  =  coords.match_to_catalog_sky(ps1coords)
-##                        
-##                        # add these indexes and distances to the table
-##                        newcols = [Column(name = "PS1_ID", dtype = int, data = idps1),
-##                                 Column(name = "D2PS1", data = d2ps1.to('arcsec').value, unit = 'arcsec')]
-##                        self.tab.add_columns(newcols)
-##                        
-##                        # then select the matches that are more apart than sep
-##                        matches = self.tab[self.tab['D2PS1']<sep.to('arcsec').value]
-##                        logging.info("%d objects are within %.2f arcsec to a PS1 calibrator"%(
-##                            len(matches), sep.to('arcsec').value))
-##                        
-##                        # finally group them accoring to the PS1 id.
-##                        cals = matches.group_by('PS1_ID')
-##                        
-##                        # check that, no more than one object per dataset is
-##                        # associated to any PS1 calibrator
-##                        if np.any(np.diff(cals.indices)>len(self.hdf5paths)):
-##                            logging.warning(
-##                                "some PS1 calibrator has more than %d matches."%len(self.hdf5paths))
-##                            logging.warning("there are probably problems with the matching.")
-                else:
-                    self.logger.info(
-                    "FIELDID and/or RCID missing from objtable dataframe. Matching source by source.")
-                    
-                    # loop over the df rows
-                    # find the match
-                    # create the df
-                    
-                    pass
+                pandas.DataFrame with the clusterID as index and the key in the
+                function 
+            
+        """
+        self._check_for_gdf
+        df_utils.check_col(col, self.gdf)
+        
+        # see if it's in df_utils
+        if type(function) == str:
+            try:
+                func = getattr(df_utils, function)
+                self.logger.info("using function %s from df_utils module"%function)
+            except AttributeError:
+                self.logger.info("using user defined function %s"%function.__name__)
+        else:
+            func = function
+            
+        # apply and return
+        return self.gdf[col].apply(func).unstack()
 
-            
