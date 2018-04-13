@@ -281,6 +281,8 @@ class objtable(dataset_base, _objtable_methods):
         if dropmag:
             logging.info("dropping non calibrated magnitude %s from dataframe"%mag_col)
             self.df.drop(columns = [mag_col])
+        
+        # TODO: diagnostic plot with the pool distribution
 
 
     def cluster_op(self, col, function):

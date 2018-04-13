@@ -8,6 +8,7 @@
 import tqdm, time, jenkspy
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from extcats import CatalogQuery
 import dataslicer.df_utils as df_utils
