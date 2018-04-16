@@ -364,7 +364,7 @@ class objtable(dataset_base, _objtable_methods):
         # start from the bottom-left corner of the image, so that RC 14 is
         # at position (0, 0) and RC 48 at (7, 7).
         yrc= 2*((ccd-1)//4) + 1*np.logical_or(q==1, q==2)
-        xrc=2*( 4-(ccd-1)%4)-1 - 1*np.logical_or(q==2, q==3)
+        xrc= 2*( 4-(ccd-1)%4)-1 - 1*np.logical_or(q==2, q==3)
         
         # now add the gaps between the ccds, and the rc size in pixels 
         # so that you have the x/y camera position of the lower-left corner of the RCs
@@ -377,5 +377,10 @@ class objtable(dataset_base, _objtable_methods):
         self.df[cam_y_name] = yll + self.df[rc_y_name]
         self.logger.info("computed camera-wide coordinates of the sources as columns: %s %s of the dataframe"%
             (cam_x_name, cam_y_name))
-        # TO DO: rotation?
-
+        
+        # TODO: rotation?
+        
+        # eventually update the grouped dataframe
+        if hasattr(self, 'gdf'):
+            self.logger.info("updating grouped dataframe")
+            self.gdf = self.df.groupby('clusterID', sort = False)

@@ -54,7 +54,7 @@ class dataset(dataset_base):
         self._check_for_metadata()
 
 
-    def load_metadata(self, metadata_file = None, **args):
+    def load_metadata(self, metadata_file = None, force_reload = False, **args):
         """
             load the metadata pertaining to this dataset. If a csv file named metadata_file
             is found in the data directory, the metadata are read from that file if
@@ -66,13 +66,17 @@ class dataset(dataset_base):
                 metadata_file: `str`
                     path to a csv file containing the metadata for the dataset you
                     want to read.
+                
+                force_reload: `bool`
+                    if True, metadata will be reloaded from the fits files, even
+                    if a metadata_file is found. This file will be overwritten.
         """
         
         self.metadata = metadata(self.name, self.datadir, self.fext, self.logger)
         if metadata_file is None:
             metadata_file = os.path.join(self.datadir, self.name+"_metadata.csv")
         read_from_fits = True 
-        if os.path.isfile(metadata_file):
+        if os.path.isfile(metadata_file) and (not force_reload):
             self.logger.info("found metadata file: %s"%metadata_file)
             self.metadata.read_csv(fname = metadata_file, **args)
             read_from_fits = False
@@ -127,7 +131,9 @@ class dataset(dataset_base):
             Parameters:
             -----------
             
-                args: dataset_base.query_df or objtable.load_data args
+                args: dataset_base.query_df or objtable.load_data args. If expr = str
+                is provided, the string will be used to query the metadata and download
+                just the selected objects.
         """
         
         # eventually cut on metadata, or got them all
