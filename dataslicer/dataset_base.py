@@ -218,9 +218,12 @@ class dataset_base():
         
         # select valid kwargs
         true_args = select_kwargs(pd.DataFrame.query, **dfquery_args)
-        self.logger.info("quering dataframe with: %s"%true_args['expr'])
         qdf = self.df.query(**true_args)
         if dfquery_args['inplace']:
+            self.logger.info("quering dataframe with: %s. %d sources survived"%
+                (true_args['expr'], len(self.df)))
             return self.df
         else:
+            self.logger.info("quering dataframe with: %s. %d sources survived"%
+                (true_args['expr'], len(qdf)))
             return qdf

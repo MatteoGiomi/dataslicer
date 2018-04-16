@@ -217,7 +217,7 @@ class objtable(dataset_base, _objtable_methods):
                     calibrated magnitude value and its error. If None the name will 
                     be cal_+magname and err_cal_+magname
                 
-                zp_name/clrcoeff_name: `str`
+                zp_name/clrcoeff_name: `str` or None
                     name of ZP and color coefficient term. If clrcoeff_name is None, 
                     color correction will be ignored.
                 
@@ -325,4 +325,66 @@ class objtable(dataset_base, _objtable_methods):
             
         # apply and return
         return self.gdf[col].apply(func).unstack()
+
+
+    def compute_camera_coord(self, rc_x_name, rc_y_name, camera_x_name = 'cam_xpos', 
+        camera_y_name = 'cam_ypos', xgap = 7, ygap = 10, rcid_name = 'RCID'):
+        """
+            compute the camera-wide x/y coordinates of the sources.
+            
+            Parameters:
+                
+                rc_x[y]_name: `str`
+                    name of dataframe column containg the position of the sources 
+                    in pixel on the readout channel (RC)
+                
+                camera_x[y]_name: `str`
+                    name of the columns that will contain the camera-wide coordinates.
+                
+                x[y]gap: `int`
+                    size of gap between CCDs, in pixels.
+                
+                rcid_name: `str`
+                    name of column containing the ID of the readout-channels (0 to 63).
+        """
+        
+        def get_rc_xy(rcid):
+            """
+                given the readout channel ID (rcid, 0 to 63), return the x,y 
+                position of this RC on the 8 x 8 grid of the full ZTF field.
+            """
+            # compute ccd and quadrant (1 to 4) from RC
+            ccd_id = rcid//4 + 1
+            q = rcid%4 + 1
+            # arrange the rows / cols based on ccd and q
+            yfield=7-( 2*((ccd-1)//4) + 1*(q==1 or q==2) )
+            xfield=2*( 4-(ccd-1)%4)-1 - 1*(q==2 or q==3)
+            print (rcid)
+            input()
+            return xfield, yfield
+        
+        
+        # checks
+        df_utils.check_col([rc_x_name, rc_y_name, rcid_name], self.df)
+        self.logger.info("computing camera-wide coordinates for the sources")
+        
+        out = self.df[rcid_name].apply(get_rc_xy)
+        print (out)
+        return 
+        
+#        xsize, ysize = 3080, 3072
+
+
+#        ccd = g["CCDID"].values
+#        calmag_res = (g['MAGZP'] + g['mag']).values     # Matteo: here you can simply call g['cal_mag'] and have the ZP in
+#        calmag_sig = g['sigmag'].values
+#        xpos = g['xpos'].values
+#        ypos = g['ypos'].values
+
+#        xposfull = np.zeros(xpos.shape)
+#        yposfull = np.zeros(xpos.shape)
+#        for ii in range(len(xposfull)):
+#            rows, cols = np.where(ccd[ii] == ccd_order) 
+#            xposfull[ii] = xpos[ii] + cols[0]*(xsize+xgap)
+#            yposfull[ii] = ypos[ii] + rows[0]*(ysize+ygap)
 

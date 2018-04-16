@@ -102,8 +102,6 @@ def subtract_dfs(df1, df2):
     df_all = df1.merge(df2.drop_duplicates(), on=None, 
             how='left', indicator=True)
     return df1[df_all['_merge'] == 'left_only']
-    
-
 
 def group_stats(group):
     """
