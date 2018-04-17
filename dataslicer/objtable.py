@@ -10,7 +10,8 @@ import pandas as pd
 import numpy as np
 from sklearn.cluster import DBSCAN
 
-import dataslicer.df_utils as df_utils
+#import dataslicer.df_utils as df_utils
+from dataslicer.df_utils import fits_to_df, check_col
 from dataslicer.dataset_base import dataset_base, select_kwargs
 
 
@@ -82,14 +83,14 @@ class objtable(dataset_base, _objtable_methods):
             raise RuntimeError("found no file to load.")
         
         # create the big dataframe
-        true_args = select_kwargs(df_utils.fits_to_df, **fits_to_df_args)
+        true_args = select_kwargs(fits_to_df, **fits_to_df_args)
         start = time.time()
         if target_metadata_df is None:
-            frames  = [df_utils.fits_to_df(ff, **true_args) for ff in tqdm.tqdm(files)]
+            frames  = [fits_to_df(ff, **true_args) for ff in tqdm.tqdm(files)]
         else:
             frames = []
             for ff in tqdm.tqdm(files):
-                buff = df_utils.fits_to_df(ff, **true_args)
+                buff = fits_to_df(ff, **true_args)
                 if add_obs_id:
                     obsid = target_metadata_df[
                         target_metadata_df['PATH'] == ff]['OBSID'].values[0]
@@ -247,9 +248,9 @@ class objtable(dataset_base, _objtable_methods):
         if not err_mag_col is None:
             needed_cols.extend([zp_err, clrcoeff_err, err_mag_col])
         
-        df_utils.check_col(needed_cols, self.df)
+        check_col(needed_cols, self.df)
         for k in needed_cols:
-            df_utils.check_col(k, self.df)
+            check_col(k, self.df)
         
         # name the cal mag column and the one for the error
         if calmag_col is None:
@@ -285,48 +286,6 @@ class objtable(dataset_base, _objtable_methods):
         # TODO: diagnostic plot with the pool distribution
 
 
-    def cluster_op(self, col, function):
-        """
-            apply a function to each cluster group in this dataframe and 
-            return a dataframe with the results.
-            
-            Parameters:
-            -----------
-            
-                col: `str`
-                    name of the column on which the operation is to be performed.
-                
-                op: `callable` or `str`
-                    the function to be applied to the desired column of each group.
-                    Must reuturn a dictionary so that the results can be parsed into
-                    another dataframe. If string, it can be used to select functions
-                    from the df_utils module.
-                    
-            
-            Returns:
-            --------
-                
-                pandas.DataFrame with the clusterID as index and the key in the
-                function 
-            
-        """
-        self._check_for_gdf
-        df_utils.check_col(col, self.gdf)
-        
-        # see if it's in df_utils
-        if type(function) == str:
-            try:
-                func = getattr(df_utils, function)
-                self.logger.info("using function %s from df_utils module"%function)
-            except AttributeError:
-                self.logger.info("using user defined function %s"%function.__name__)
-        else:
-            func = function
-            
-        # apply and return
-        return self.gdf[col].apply(func).unstack()
-
-
     def compute_camera_coord(self, rc_x_name, rc_y_name, cam_x_name = 'cam_xpos', 
         cam_y_name = 'cam_ypos', xgap_pix = 7, ygap_pix = 10, rcid_name = 'RCID'):
         """
@@ -353,7 +312,7 @@ class objtable(dataset_base, _objtable_methods):
         xsize, ysize = 3080, 3072
         
         # checks
-        df_utils.check_col([rc_x_name, rc_y_name, rcid_name], self.df)
+        check_col([rc_x_name, rc_y_name, rcid_name], self.df)
         
         # compute ccd and quadrant (1 to 4) from RC
         ccd = (self.df[rcid_name]//4 + 1).rename('ccd')

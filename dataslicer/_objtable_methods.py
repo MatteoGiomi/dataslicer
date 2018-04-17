@@ -11,7 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from extcats import CatalogQuery
-import dataslicer.df_utils as df_utils
+from dataslicer.df_utils import check_col, downcast_df
 
 class _objtable_methods():
     
@@ -94,8 +94,9 @@ class _objtable_methods():
                         ps1cps.append(buff)
                 
                 # merge the dataframe
+                ps1cp_df = downcast_df(pd.DataFrame(ps1cps))
                 self.df = self.df.merge(
-                    pd.DataFrame(ps1cps), on = 'clusterID', how='left',  suffixes=['', '_ps1'])
+                    ps1cp_df, on = 'clusterID', how='left',  suffixes=['', '_ps1'])
                 self.logger.info("Found PS1 calibrators for %d clusters"%
                     (len(ps1cps)))
                 
@@ -227,7 +228,7 @@ class _objtable_methods():
         
         # checks
         self._check_for_gdf()
-        df_utils.check_col([cal_mag_name, ps1mag_name], self.gdf)
+        check_col([cal_mag_name, ps1mag_name], self.gdf)
         
         # create smaller df with cluster average mag and it's difference wrt ps1 cal
         start = time.time()

@@ -220,10 +220,10 @@ class dataset_base():
         true_args = select_kwargs(pd.DataFrame.query, **dfquery_args)
         qdf = self.df.query(**true_args)
         if dfquery_args['inplace']:
-            self.logger.info("quering dataframe with: %s. %d sources survived"%
+            self.logger.info("quering dataframe with: %s. %d rows survived"%
                 (true_args['expr'], len(self.df)))
             return self.df
         else:
-            self.logger.info("quering dataframe with: %s. %d sources survived"%
+            self.logger.info("quering dataframe with: %s. %d rows survived"%
                 (true_args['expr'], len(qdf)))
             return qdf

@@ -11,7 +11,7 @@ from astropy.io import fits
 import pandas as pd
 
 from dataslicer.dataset_base import dataset_base
-
+from dataslicer.df_utils import downcast_df
 
 class metadata(dataset_base):
     """
@@ -30,7 +30,7 @@ class metadata(dataset_base):
         self._read_csv(tag = 'metadata', **args)
 
 
-    def load_header_meta(self, header_keys = None, **getheader_args):
+    def load_header_meta(self, header_keys = None, downcast = True, **getheader_args):
         """
             go and read the header of the fits files and create a 
             dataframe with the desired header keywords. The dataframe
@@ -46,6 +46,10 @@ class metadata(dataset_base):
                     dataframe. If None, a default list of keywords will be used.
                     primitive wildchar support is possible (e.g: APCOR* will take
                     all the keywords with APCOR in the name).
+                
+                downcast: `bool`
+                    if True, uses pd.to_numeric to downcast ints and floats columns
+                    in order to reduce RAM usage.
                 
                 getheader_args: `kwargs`
                     arguments to be passed to astropy.io.fits.getheader.
@@ -87,6 +91,10 @@ class metadata(dataset_base):
         self.df['OBSID'] = (
                     self.df['EXPID'].astype(str) + 
                     self.df['RCID'].astype(str) ).astype(int)
+        
+        if downcast:
+            self.df = downcast_df(self.df)
+        
 #        self.df.set_index('OBSID', inplace = True, drop = False)
         self.logger.info("loaded meta data from fits headers for %d files into metadata dataframe."%len(self.df))
 

@@ -22,7 +22,7 @@ class dataset(dataset_base):
         and the associated metadata.
     """
     
-    def __init__(self, name, datadir, fext  =  ".fits", logger = None, **args):
+    def __init__(self, name, datadir, fext  =  ".fits", logger = None, **load_meta_args):
         """
             Parameters
             ----------
@@ -38,6 +38,9 @@ class dataset(dataset_base):
                 
                 logger: `logger.Logger`:
                     logger for the class. If None, a default one will be created.
+                
+                load_meta_args: `kwargs`
+                    to be passed to self.load_metadata
         """
         
         # init the logger
@@ -50,7 +53,7 @@ class dataset(dataset_base):
         self.logger.info("found %d .%s files in directory: %s"%(len(self.files), self.fext, self.datadir))
         
         # load metadata
-        self.load_metadata(**args)
+        self.load_metadata(**load_meta_args)
         self._check_for_metadata()
 
 
