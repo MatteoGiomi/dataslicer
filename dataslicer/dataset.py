@@ -22,7 +22,8 @@ class dataset(dataset_base):
         and the associated metadata.
     """
     
-    def __init__(self, name, datadir, fext  =  ".fits", logger = None, **load_meta_args):
+#    def __init__(self, name, datadir, fext  =  ".fits", logger = None, **load_meta_args):
+    def __init__(self, name, datadir, fext  =  ".fits", logger = None):
         """
             Parameters
             ----------
@@ -38,9 +39,6 @@ class dataset(dataset_base):
                 
                 logger: `logger.Logger`:
                     logger for the class. If None, a default one will be created.
-                
-                load_meta_args: `kwargs`
-                    to be passed to self.load_metadata
         """
         
         # init the logger
@@ -53,8 +51,8 @@ class dataset(dataset_base):
         self.logger.info("found %d .%s files in directory: %s"%(len(self.files), self.fext, self.datadir))
         
         # load metadata
-        self.load_metadata(**load_meta_args)
-        self._check_for_metadata()
+#        self.load_metadata(**load_meta_args)
+#        self._check_for_metadata()
 
 
     def load_metadata(self, metadata_file = None, force_reload = False, **args):
@@ -94,6 +92,51 @@ class dataset(dataset_base):
             self.metadata.to_csv(**args)
 
 
+    def load_objtable(self, **args):
+        """
+            load the table data for this dataset eventually cut on metadata to select 
+            only certains files to be loaded.
+            
+            Parameters:
+            -----------
+            
+                args: dataset_base.query_df or objtable.load_data args. If expr = str
+                is provided, the string will be used to query the metadata and download
+                just the selected objects.
+        """
+        
+        # eventually cut on metadata, or got them all
+        if 'expr' in args.keys():
+            meta = self.metadata.query_df(**args)
+        else:
+            meta = self.metadata.df
+        
+        # load the data
+        self.objtable = objtable(self.name, self.datadir, self.fext, self.logger)
+        self.objtable.load_data(target_metadata_df = meta, **args)
+    
+    def load(self, objtable_ext, metadata_ext, **args):
+        """
+            load metadata and objtable for this dataset.
+            
+            Parameters:
+            -----------
+                
+                objtable_ext: `str` or `int`
+                    extension ID of the table data in the fits files
+                
+                metadata_ext: `str` or `int`
+                    extension ID for the header fits file containing the metadata.
+                    This will be passed to astropy.io.fits.getheader as par ext
+        """
+        args['ext'] = metadata_ext
+        self.load_metadata(**args)
+        args['extension'] = objtable_ext
+        self.load_objtable(**args)
+        self._check_for_metadata()
+        self._check_for_objtable()
+
+
     def _check_for_metadata(self):
         """
             check if the object contains a valid metadata description.
@@ -124,30 +167,7 @@ class dataset(dataset_base):
             self.metadata._set_plot_dir(plot_dir)
         if hasattr(self, 'objtable'):
             self.objtable._set_plot_dir(plot_dir)
-
-
-    def load_objtable(self, **args):
-        """
-            load the table data for this dataset eventually cut on metadata to select 
-            only certains files to be loaded.
-            
-            Parameters:
-            -----------
-            
-                args: dataset_base.query_df or objtable.load_data args. If expr = str
-                is provided, the string will be used to query the metadata and download
-                just the selected objects.
-        """
-        
-        # eventually cut on metadata, or got them all
-        if 'expr' in args.keys():
-            meta = self.metadata.query_df(**args)
-        else:
-            meta = self.metadata.df
-        
-        # load the data
-        self.objtable = objtable(self.name, self.datadir, self.fext, self.logger)
-        self.objtable.load_data(target_metadata_df = meta, **args)
+    
 
 
     def merge_metadata_to_sources(self, metadata_cols = None, join_on = 'OBSID'):

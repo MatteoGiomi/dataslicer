@@ -176,7 +176,7 @@ class _objtable_methods():
                 h = ax.hist(self.gdf['dist2ps1'].max(), bins = 50, log = True)
                 ax.set_xlabel("cluster distance to PS1 calibrator [arcsec]")
                 fig.tight_layout()
-                self.save_fig(fig, 'match_to_PS1cal.png')
+                self.save_fig(fig, '%s_match_to_PS1cal.png'%self.name)
                 plt.close()
         
         
@@ -303,7 +303,7 @@ class _objtable_methods():
             ax2.axvline(norm_mag_diff_cut, c = 'r')
             ax2.set_xlabel("normalized mag distance")
             fig.tight_layout()
-            self.save_fig(fig, 'ps1based_outlier_rm.png')
+            self.save_fig(fig, '%s_ps1based_outlier_rm.png'%self.name)
             plt.close()
         
         # replace the clean dfs

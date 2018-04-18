@@ -32,11 +32,11 @@ class objtable(dataset_base, _objtable_methods):
     """
 
     def to_csv(self, **args):
-        self._to_csv(tag = 'tabledata', **args)
+        self._to_csv(tag = 'objtable', **args)
 
 
     def read_csv(self, **args):
-        self._read_csv(tag = 'tabledata', **args)
+        self._read_csv(tag = 'objtable', **args)
 
 
     def _check_for_gdf(self):
