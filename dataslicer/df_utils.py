@@ -9,7 +9,7 @@ import pandas as pd
 from astropy.io import fits
 
 
-def fits_to_df(fitsfile, extension, columns = None, keep_array_cols = False, downcast = True, verbose = False):
+def fits_to_df(fitsfile, extension, select_columns = 'all', keep_array_cols = False, downcast = False, verbose = False):
     """
         load a table extension contained into a fits file into a pandas 
         DataFrame.
@@ -24,8 +24,8 @@ def fits_to_df(fitsfile, extension, columns = None, keep_array_cols = False, dow
                 extension to be read. This will be the second parameter
                 passed to astropy.io.fits.getdata
             
-            columns: `list`
-                list of column names to be read from the files. If None, 
+            select_columns: `list`
+                list of column names to be read from the files. If 'all', 
                 all the columns will be read.
             
             keep_array_cols: `bool`
@@ -43,11 +43,17 @@ def fits_to_df(fitsfile, extension, columns = None, keep_array_cols = False, dow
     """
     if verbose:
         print ("fits_to_df: reading file %s"%fitsfile)
+    
+    magic_cols = [c for c in select_columns if '*' in c]   # select cols for which you want to use wildchar
+    normal_cols = list(set(select_columns) - set(magic_cols))
     data = fits.getdata(fitsfile, extension)
     datadict = {}
     for dc in data.columns:
-        if not columns is None and ( not any([uc.replace("*", "") in dc.name for uc in columns]) ):
-            continue
+        if not select_columns == 'all':
+            if not ( (dc.name in normal_cols) or 
+                     (any([mc.replace("*", "") in dc.name for mc in magic_cols])) ):
+                continue
+        # check for array col
         if int(dc.format[0]) > 1:
             if not keep_array_cols:
                 continue

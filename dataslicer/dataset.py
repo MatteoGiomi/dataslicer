@@ -11,9 +11,10 @@ import pandas as pd
 import numpy as np
 from astropy.io import fits
 
-from dataslicer.dataset_base import dataset_base
+from dataslicer.dataset_base import dataset_base, select_kwargs
 from dataslicer.metadata import metadata
 from dataslicer.objtable import objtable
+from astropy.io import fits
 
 
 class dataset(dataset_base):
@@ -76,13 +77,13 @@ class dataset(dataset_base):
         self.metadata = metadata(self.name, self.datadir, self.fext, self.logger)
         if metadata_file is None:
             metadata_file = os.path.join(self.datadir, self.name+"_metadata.csv")
-        read_from_fits = True 
+        
+        # check for the file and if the df all has the columns you requested, else reload it.
+        read_from_fits = True
         if os.path.isfile(metadata_file) and (not force_reload):
             self.logger.info("found metadata file: %s"%metadata_file)
             self.metadata.read_csv(fname = metadata_file, **args)
             read_from_fits = False
-            
-            # check if the file all has the columns you requested, else reload it.
             hk = args.get('header_keys', None)
             if ( hk is not None and not set(hk).issubset(set(self.metadata.df.columns.values)) ):
                 self.logger.info("requested columns are different from those found in file. Reloading it.")
@@ -92,28 +93,54 @@ class dataset(dataset_base):
             self.metadata.to_csv(**args)
 
 
-    def load_objtable(self, **args):
+    def load_objtable(self, objtable_file = None, force_reload = False, **args):
         """
             load the table data for this dataset eventually cut on metadata to select 
             only certains files to be loaded.
             
             Parameters:
             -----------
-            
-                args: dataset_base.query_df or objtable.load_data args. If expr = str
-                is provided, the string will be used to query the metadata and download
-                just the selected objects.
+                
+                objtable_file: `str` or None
+                    path to a csv file containing an objtable dataframe you want to
+                    load. If None, a default file named self.name+_objtable.csv is
+                    searched for in self.datadir
+                
+                force_reload: `bool`
+                    if True, objtable will be reloaded from the fits files, even
+                    if a metadata_file is found. This file will then be overwritten.
+                
+                args: dataset_base.query_df and/or objtable.load_data and/or objtable.to_csv args. 
+                    If expr = str is provided, the string will be used to query 
+                    the metadata and load just the selected objects.
         """
-        
-        # eventually cut on metadata, or got them all
-        if 'expr' in args.keys():
-            meta = self.metadata.query_df(**args)
-        else:
-            meta = self.metadata.df
-        
-        # load the data
         self.objtable = objtable(self.name, self.datadir, self.fext, self.logger)
-        self.objtable.load_data(target_metadata_df = meta, **args)
+        if objtable_file is None:
+            objtable_file = os.path.join(self.datadir, self.name+"_objtable.csv")
+        # check for the file and if the df all has the columns you requested, else reload it.
+        read_from_fits = True
+        if os.path.isfile(objtable_file) and (not force_reload):
+            self.logger.info("found objtable file: %s"%objtable_file)
+            self.objtable.read_csv(fname = objtable_file, **args)
+            read_from_fits = False
+            # check the columns (in case you want all of them, check what are those)
+            req_cols = args.get('select_columns', None)
+            if req_cols == 'all':
+                head0 = fits.getheader(self.files[0], args['extension'])
+                req_cols = [cname for key, cname in head0.items() if 'TTYPE' in key]
+            if ( req_cols is not None and not set(req_cols).issubset(set(self.objtable.df.columns.values)) ):
+                self.logger.info("requested columns are different from those found in file. Reloading it.")
+                read_from_fits = True
+        
+        if read_from_fits:
+            # eventually cut on metadata, or got them all.
+            if 'expr' in args.keys():
+                meta = self.metadata.query_df(**args)
+            else:
+                meta = self.metadata.df
+            self.objtable.load_data(target_metadata_df = meta, **args)
+            print (self.objtable.df.columns.values)
+            self.objtable.to_csv(**args)
     
     def load(self, objtable_ext, metadata_ext, **args):
         """
@@ -167,7 +194,6 @@ class dataset(dataset_base):
             self.metadata._set_plot_dir(plot_dir)
         if hasattr(self, 'objtable'):
             self.objtable._set_plot_dir(plot_dir)
-    
 
 
     def merge_metadata_to_sources(self, metadata_cols = None, join_on = 'OBSID'):
