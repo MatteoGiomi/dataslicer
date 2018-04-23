@@ -117,12 +117,14 @@ class dataset(dataset_base):
         self.objtable = objtable(self.name, self.datadir, self.fext, self.logger)
         if objtable_file is None:
             objtable_file = os.path.join(self.datadir, self.name+"_objtable.csv")
+        
         # check for the file and if the df all has the columns you requested, else reload it.
         read_from_fits = True
         if os.path.isfile(objtable_file) and (not force_reload):
             self.logger.info("found objtable file: %s"%objtable_file)
             self.objtable.read_csv(fname = objtable_file, **args)
             read_from_fits = False
+            
             # check the columns (in case you want all of them, check what are those)
             req_cols = args.get('select_columns', None)
             if req_cols == 'all':
@@ -139,7 +141,6 @@ class dataset(dataset_base):
             else:
                 meta = self.metadata.df
             self.objtable.load_data(target_metadata_df = meta, **args)
-            print (self.objtable.df.columns.values)
             self.objtable.to_csv(**args)
     
     def load(self, objtable_ext, metadata_ext, **args):

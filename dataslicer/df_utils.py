@@ -9,7 +9,8 @@ import pandas as pd
 from astropy.io import fits
 
 
-def fits_to_df(fitsfile, extension, select_columns = 'all', keep_array_cols = False, downcast = False, verbose = False):
+def fits_to_df(fitsfile, extension, select_columns = 'all', keep_array_cols = False, 
+    select_rows = None, downcast = False, verbose = False):
     """
         load a table extension contained into a fits file into a pandas 
         DataFrame.
@@ -31,6 +32,11 @@ def fits_to_df(fitsfile, extension, select_columns = 'all', keep_array_cols = Fa
             keep_array_cols: `bool`
                 if True and array columns are present in the fits table,
                 they will be converted and included in the dataframe.
+            
+            select_rows: `str` or None,
+                query expression used to select the rows you want to retain. This is
+                passed to pd.DataFrame.query as the expr parameter. If None, no cut
+                will be applied. 
             
             downcast: `bool`
                 if True, uses pd.to_numeric to downcast ints and floats columns
@@ -62,6 +68,8 @@ def fits_to_df(fitsfile, extension, select_columns = 'all', keep_array_cols = Fa
         else:
             datadict[dc.name] = data[dc.name].byteswap().newbyteorder()
     df = pd.DataFrame(datadict)
+    if not select_rows None:
+        df = df.query(select_rows)
     if downcast:
         df = downcast_df(df)
     return df
