@@ -68,7 +68,7 @@ def fits_to_df(fitsfile, extension, select_columns = 'all', keep_array_cols = Fa
         else:
             datadict[dc.name] = data[dc.name].byteswap().newbyteorder()
     df = pd.DataFrame(datadict)
-    if not select_rows None:
+    if not select_rows is None:
         df = df.query(select_rows)
     if downcast:
         df = downcast_df(df)

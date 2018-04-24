@@ -180,9 +180,9 @@ class _objtable_methods():
                 plt.close()
         
         
-    def ps1based_outlier_rm(self, cal_mag_name, ps1mag_name, norm_mag_diff_cut, n_mag_bins=10, plot = True):
+    def ps1based_outlier_rm_iqr(self, cal_mag_name, ps1mag_name, norm_mag_diff_cut, n_mag_bins=10, plot = True):
         """
-            remove clusters based on the difference between the cluster average
+            remove clusters based on the normalized difference between the cluster average
             magnitude and that of the associated PS1 calibrator star. The algorithm
             works as follows:
                 
@@ -311,3 +311,45 @@ class _objtable_methods():
         self.gdf = clean_gdf
         self.logger.info("%d sources and %d clusters retained."%(len(self.df), len(self.gdf)))
         return (outl_df)
+
+
+    def select_clusters(self, cond):
+        """
+            remove the clusters and corresponding sources from the dataframe unless
+            a given condition is satisfied by all the member of the cluster.
+            
+            Parameters:
+            -----------
+            
+                cond: `str`
+                    condition that all the member of a cluster have to satisfy in order
+                    not to be rejected.
+                
+                plot: `bool`
+                    if you want to visualize the result of the procedure.
+            
+            Returns:
+            --------
+                
+                pandas.DataFrame with the rejected outliers.
+        """
+        
+        # TODO: extend so that you can ask for cluster in which AT LEAST n sources satisfy
+        # the condition
+        
+        self.logger.info("selecting clusters for which %s is satified by all the members"%cond)
+        
+        # select sources with magnitude difference greater than the cut
+        rejected = self.df.query("not (%s)"%cond)
+        self.logger.info("found %d sources that do not satisfy the condition"%len(rejected))
+        
+        # find out which clusters are affected
+        bad_cluster_ids = rejected['clusterID'].unique()
+        self.logger.info("%d sources do not satisfy the condition. They belong to these %d clusters: %s"%
+            (len(rejected), len(bad_cluster_ids), ", ".join(["%d"%cid for cid in bad_cluster_ids])))
+        
+        # remove all the sources contained in these clusters and go
+        self.df.query("clusterID not in @bad_cluster_ids", inplace = True)
+        self.gdf = self.df.groupby('clusterID', sort = False)
+        self.logger.info("%d sources and %d clusters retained."%(len(self.df), len(self.gdf)))
+        return rejected
