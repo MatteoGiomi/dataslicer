@@ -165,7 +165,6 @@ def match_to_PS1cal_fields():
     ps1srcs = [src for src in ps1cal_query.src_coll.find(
     {'field': { "$in": fields}, 'rcid': {'$in': rcids}},
     { '_id': 1, 'ra': 1, 'dec': 1 })]
-    match the object by coordinates: 
     
     # first find the closest calibrator for each object
     coords = SkyCoord(self.tab[xname], self.tab[yname], **skycoords_kwargs)
@@ -194,7 +193,7 @@ def match_to_PS1cal_fields():
         logging.warning("there are probably problems with the matching.")
 
 
-def match_to_PS1cal(ras, decs, rs_arcsec, dbclient = None, idkey = 'ps1id',
+def match_to_PS1cal(ras, decs, rs_arcsec, ids, dbclient = None,
     col2rm = ['rcid', 'field', '_id', 'hpxid_16'],  show_pbar = True, logger = None):
     """
         given a list of coordinates, return a dataframe containing
@@ -214,10 +213,14 @@ def match_to_PS1cal(ras, decs, rs_arcsec, dbclient = None, idkey = 'ps1id',
                 pymongo client that manages the PS1 calibrators databae.
                 This is passed to extcats CatalogQuery object.
             
-            id_key: `str`
-                name of column to use to identify sources matched to the same PS1 cal.
-                IF id_key == ps1id (default), the _id in the mongod of the PS1 cal cp
-                is used. Else the index of in the given coordinate pair.
+            ids: `str` or (str, ids) tuple
+                ID of the sources to makes it possible to attach, to each coordinate pair,
+                the corresponding PS1cal.
+                If ids is string, the resulting datframe will have a column called
+                ids and the element in this column will be the index of the coordinate
+                pair in the inpu lists.
+                If ids is a (str, ids) tuple, the resulting dataframe will have a column
+                named ids[0] and will take the values given in ids[0].
             
             col2rm: `list`
                 names of columns in the PS1 calibrator catalogs to be excluded from the
@@ -243,6 +246,13 @@ def match_to_PS1cal(ras, decs, rs_arcsec, dbclient = None, idkey = 'ps1id',
     
     if len(ras)!=len(decs):
         raise RuntimeError("ra/dec coordinate lists have different lengths.")
+    if not type(ids) is str:
+        if len(ids) != 2:
+            raise ValueError("provided ids argument is not a list/tuple/ecc of 2 elements.")
+            if not type(ids[0]) is str:
+                raise ValueError("first element of ids should be a string.")
+            if not len(ids[1]) == len(ras):
+                raise ValueError("list of id values has different length than coordinates.")
     
     # loop on the coordinate pairs and create list of dictionaries
     ps1cps = []
@@ -262,10 +272,10 @@ def match_to_PS1cal(ras, decs, rs_arcsec, dbclient = None, idkey = 'ps1id',
                 if (not col2rm is None) and (c not in col2rm):     # remove unwanted columns
                     buff[c] = ps1match[0][c]
             buff['dist2ps1'] = ps1match[1]
-            id_val = ic
-            if idkey == 'ps1id':
-                id_val = ps1match['_id']
-            buff[idkey] = id_val        # this will be used to join the df
+            if type(ids) is str:
+                buff[ids] = ic
+            else:
+                buff[ids[0]] = ids[1][ic]
             ps1cps.append(buff)
                 
     # merge the dataframe

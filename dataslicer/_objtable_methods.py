@@ -11,7 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from extcats import CatalogQuery
-from dataslicer.df_utils import check_col, downcast_df
+from dataslicer.df_utils import check_col, match_to_PS1cal, match_to_PS1cal_fields
 
 class _objtable_methods():
     
@@ -22,8 +22,7 @@ class _objtable_methods():
     # ------------------------------------------------------------- #
     
     def match_to_PS1cal(self, rs_arcsec, use_clusters, xname, yname,
-            clean_non_matches = True, col2rm = ['rcid', 'field', '_id', 'hpxid_16'], 
-            rm_off_clusters = True, dbclient = None, plot = True): 
+            clean_non_matches = True, plot = True, **match_to_PS1_kwargs): 
             """
                 Match the sources in the objtable to the PS1 calibrator stars. To each
                 row in the dataframe the catalog entry of the found PS1 cp is added.
@@ -45,19 +44,23 @@ class _objtable_methods():
                         If this information is not included in this object dataframe, or if the 
                         fields are not the 'standard' ones, the matching will be done source by source.
                      
-                     clean_non_matches: `bool`
+                    clean_non_matches: `bool`
                         if True, sources with no match in the PS1cal db are removed.
                      
                     x[/y]name: `str`
                         name for table columns specifiyng the x,y (Equatorial, J2000) coordinates to use.
                     
-                    col2rm: `list`
-                        names of columns in the PS1 calibrator catalogs to be excluded from the
-                        resulting dataframe.
-                    
-                    dbclient: `pymongo.MongoClient`
-                        pymongo client that manages the PS1 calibrators databae.
-                        This is passed to extcats CatalogQuery object.
+                    match_to_PS1_kwargs: `kwargs`
+                        to be passed to df_utils.match_to_PS1. These includes:
+                            * col2rm: `list`
+                                names of columns in the PS1 calibrator catalogs to be 
+                                excluded from the resulting dataframe. Default are:
+                                ['rcid', 'field', '_id', 'hpxid_16']
+                            
+                            *dbclient: `pymongo.MongoClient`
+                                pymongo client that manages the PS1 calibrators databae.
+                                This is passed to extcats CatalogQuery object. Default is None
+                                
                     
                     plot: `bool`
                         if True, a disganostic plot showing the distribution of the 
@@ -68,37 +71,19 @@ class _objtable_methods():
             self.logger.info("using %s, %s as coordinates and a search radius of %.2f arcsec"%(
                 xname, yname, rs_arcsec))
             
-            # initialize the catalog query object and grab the database
-            ps1cal_query = CatalogQuery.CatalogQuery(
-                'ps1cal', 'ra', 'dec', dbclient = dbclient, logger = self.logger)
-            
-            # gather the found counterparts into a list of dictionary
-            ps1cps = []
             if use_clusters:
                 self.logger.info("Matching cluster centroids with the PS1 calibrators")
                 av_x, av_y = self.compute_cluster_centroid(xname, yname)
                 
-                # search cp for each cluster centroid
-                for icl, grp in tqdm.tqdm(self.gdf):
-                    ps1match =  ps1cal_query.findclosest(ra = av_x[icl], dec = av_y[icl], 
-                        rs_arcsec = rs_arcsec, method = 'healpix')
-                    
-                    # if you have a cp, add it to the list
-                    if ps1match != (None, None):
-                        buff = {}
-                        for c in ps1match[0].colnames:
-                            if (not col2rm is None) and (c not in col2rm):     # remove unwanted columns
-                                buff[c] = ps1match[0][c]
-                        buff['dist2ps1'] = ps1match[1]
-                        buff['clusterID'] = icl        # this will be used to join the df
-                        ps1cps.append(buff)
+                # do the matching
+                match_to_PS1_kwargs['ids'] = 'clusterID'
+                ps1cp_df = match_to_PS1cal(av_x, av_y, rs_arcsec, **match_to_PS1_kwargs)
+                self.logger.info("Found PS1 calibrators for %d clusters"%
+                    (len(ps1cp_df)))
                 
                 # merge the dataframe
-                ps1cp_df = downcast_df(pd.DataFrame(ps1cps))
                 self.df = self.df.merge(
                     ps1cp_df, on = 'clusterID', how='left',  suffixes=['', '_ps1'])
-                self.logger.info("Found PS1 calibrators for %d clusters"%
-                    (len(ps1cps)))
                 
                 # if requested, drop sources without PS1cp
                 if clean_non_matches:
@@ -111,12 +96,10 @@ class _objtable_methods():
                 self.gdf = self.df.groupby('clusterID', sort = False)
                 
             else:
-                raise NotImplementedError("matching based on field / rc not fully implemeted yet.") # TODO
                 # if you have the field & RC id for every object, use them if possible.
                 dfcols = self.df.columns.tolist()
+                match_src_by_src = False
                 if 'FIELDID' in dfcols and 'RCID' in dfcols:
-                    self.logger.info(
-                    "Matching source by sources using FIELDID and RC information")
                     
                     fields = self.df.FIELDID.unique().astype(int).tolist()
                     rcids = self.df.RCID.unique().astype(int).tolist()
@@ -130,46 +113,44 @@ class _objtable_methods():
                     
                     # see if the fields in the objtable are also in the database
                     if all([ff in ps1cal_fields for ff in fields]):
-                        pass
-#                        #fields = [246, 247, 248]
-#                        #rcids = [38, 55]
-#                        # get the coordinates of all the calibrators for those fields
-#                        ps1srcs = [src for src in ps1cal_query.src_coll.find(
-#                            {'field': { "$in": fields}, 'rcid': {'$in': rcids}},
-#                            { '_id': 1, 'ra': 1, 'dec': 1 })]
-##                        # match the object by coordinates: 
-##                        # first find the closest calibrator for each object
-##                        coords = SkyCoord(self.tab[xname], self.tab[yname], **skycoords_kwargs)
-##                        ps1coords = SkyCoord(
-##                            ra = ps1cals['ra']*u.deg, dec = ps1cals['dec']*u.deg, **PS1skycoords_kwargs)
-##                        idps1, d2ps1, _  =  coords.match_to_catalog_sky(ps1coords)
-##                        
-##                        # add these indexes and distances to the table
-##                        newcols = [Column(name = "PS1_ID", dtype = int, data = idps1),
-##                                 Column(name = "D2PS1", data = d2ps1.to('arcsec').value, unit = 'arcsec')]
-##                        self.tab.add_columns(newcols)
-##                        
-##                        # then select the matches that are more apart than sep
-##                        matches = self.tab[self.tab['D2PS1']<sep.to('arcsec').value]
-##                        logging.info("%d objects are within %.2f arcsec to a PS1 calibrator"%(
-##                            len(matches), sep.to('arcsec').value))
-##                        
-##                        # finally group them accoring to the PS1 id.
-##                        cals = matches.group_by('PS1_ID')
-##                        
-##                        # check that, no more than one object per dataset is
-##                        # associated to any PS1 calibrator
-##                        if np.any(np.diff(cals.indices)>len(self.hdf5paths)):
-##                            logging.warning(
-##                                "some PS1 calibrator has more than %d matches."%len(self.hdf5paths))
-##                            logging.warning("there are probably problems with the matching.")
+                        self.logger.info(
+                            "Matching to PS1 cal using FIELDID and RC information")
+                        match_to_PS1cal_fields()
+                        
+                    else:
+                        self.logger.warning("cannot find objtable fields in PS1 cal.")
+                        match_src_by_src = True
                 else:
-                    self.logger.info(
-                    "FIELDID and/or RCID missing from objtable dataframe. Matching source by source.")
+                    self.logger.info("FIELDID and/or RCID missing from objtable dataframe.")
+                    match_src_by_src = True
+                
+                if match_src_by_src:
+                    self.logger.info("Matching each source to the PS1 cal database.")
                     
-                    # loop over the df rows
-                    # find the match
-                    # create the df
+                    # do the matching
+                    match_to_PS1_kwargs['ids'] = ('srcID', self.df['srcID'])
+                    ps1cp_df = match_to_PS1cal(self.df[xname], self.df[yname], rs_arcsec, **match_to_PS1_kwargs)
+                    self.logger.info("Found PS1 calibrators for %d sources"%
+                        (len(ps1cp_df)))
+                        
+                    # merge the dataframe
+                    self.df = self.df.merge(
+                        ps1cp_df, on = 'srcID', how='left',  suffixes=['', '_ps1'])
+                    
+                    
+                    # if requested, drop sources without PS1cp
+                    if clean_non_matches:
+                        self.df.dropna(subset = ['dist2ps1'], inplace = True)
+                        self.logger.info("dropping sources without match in PS1cal DB: %d retained."%
+                            (len(self.df)))
+                    
+                    # update the grouped dataframe
+                    self.logger.info("updating cluster dataframe.")
+                    self.gdf = self.df.groupby('clusterID', sort = False)
+                    
+                    
+                    
+                    
             if plot:
                 # create diagnostic plot
                 fig, ax = plt.subplots()

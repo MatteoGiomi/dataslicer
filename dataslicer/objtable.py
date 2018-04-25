@@ -61,6 +61,7 @@ class objtable(dataset_base, _objtable_methods):
                     if True, a column identifying each data product is added to 
                     the dataframe, so that you can later join the data with the metadata.
                     This obs_id is made appending the RC ID (0..63) to the exposure ID.
+                    Additionally, each source is tagged by its OBSID+sourceID
                 
                 fits_to_pd_args: `kwargs`
                     arguments to be passed to the fits_to_df function that will
@@ -95,6 +96,9 @@ class objtable(dataset_base, _objtable_methods):
                     obsid = target_metadata_df[
                         target_metadata_df['PATH'] == ff]['OBSID'].values[0]
                     buff['OBSID'] = pd.Series( [obsid]*len(buff), dtype = int)
+                    buff['srcID'] = (
+                        buff['OBSID'].astype(str) +
+                        df['sourceid'].astype(str)).astype(int)
                 frames.append(buff)
         self.df = pd.concat(frames)
         end = time.time()
