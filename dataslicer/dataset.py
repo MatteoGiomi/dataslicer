@@ -56,7 +56,7 @@ class dataset(dataset_base):
 #        self._check_for_metadata()
 
 
-    def load_metadata(self, metadata_file = None, force_reload = False, **args):
+    def load_metadata(self, metadata_file = None, force_reload = False, meta_tocsv = True, **args):
         """
             load the metadata pertaining to this dataset. If a csv file named metadata_file
             is found in the data directory, the metadata are read from that file if
@@ -68,6 +68,9 @@ class dataset(dataset_base):
                 metadata_file: `str`
                     path to a csv file containing the metadata for the dataset you
                     want to read.
+                
+                meta_tocsv: `bool`
+                    if True, the metadata dataframe will be saved in self.datadir.
                 
                 force_reload: `bool`
                     if True, metadata will be reloaded from the fits files, even
@@ -90,10 +93,11 @@ class dataset(dataset_base):
                 read_from_fits = True
         if read_from_fits:
             self.metadata.load_header_meta(**args)
-            self.metadata.to_csv(**args)
+            if meta_tocsv:
+                self.metadata.to_csv(**args)
 
 
-    def load_objtable(self, objtable_file = None, force_reload = False, **args):
+    def load_objtable(self, objtable_file = None, force_reload = False, obj_tocsv = True, **args):
         """
             load the table data for this dataset eventually cut on metadata to select 
             only certains files to be loaded.
@@ -109,6 +113,9 @@ class dataset(dataset_base):
                 force_reload: `bool`
                     if True, objtable will be reloaded from the fits files, even
                     if a metadata_file is found. This file will then be overwritten.
+                
+                obj_tocsv: `bool`
+                    if True, the objtable dataframe will be saved in self.datadir.
                 
                 args: dataset_base.query_df and/or objtable.load_data and/or objtable.to_csv args. 
                     If expr = str is provided, the string will be used to query 
@@ -141,7 +148,8 @@ class dataset(dataset_base):
             else:
                 meta = self.metadata.df
             self.objtable.load_data(target_metadata_df = meta, **args)
-            self.objtable.to_csv(**args)
+            if obj_tocsv:
+                self.objtable.to_csv(**args)
     
     def load(self, objtable_ext, metadata_ext, **args):
         """
