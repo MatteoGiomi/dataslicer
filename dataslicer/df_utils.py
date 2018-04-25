@@ -245,7 +245,7 @@ def match_to_PS1cal(ras, decs, rs_arcsec, ids, ps1cal_query = None,
         raise RuntimeError("ra/dec coordinate lists have different lengths.")
     if not type(ids) is str:
         if len(ids) != 2:
-            raise ValueError("provided ids argument is not a list/tuple/ecc of 2 elements.")
+            raise ValueError("provided ids argument is not a list/tuple/ecc.. of 2 elements.")
             if not type(ids[0]) is str:
                 raise ValueError("first element of ids should be a string.")
             if not len(ids[1]) == len(ras):

@@ -198,6 +198,7 @@ class dataset(dataset_base):
             set the path of the directory used to store diagnostic plots for 
             both metdata and 
         """
+        self.logger.info("diagnostic plots will be saved to %s"%(plot_dir))
         self._set_plot_dir(plot_dir)
         if hasattr(self, 'metatdata'):
             self.metadata._set_plot_dir(plot_dir)

@@ -76,7 +76,7 @@ class _objtable_methods():
             
             # initilaize the query object and pass it to the function.
             ps1cal_query = CatalogQuery.CatalogQuery(
-                'ps1cal', 'ra', 'dec', dbclient = dbclient, logger = self.logger)
+                'ps1cal', 'ra', 'dec', dbclient = None, logger = self.logger)
             match_to_PS1_kwargs['ps1cal_query'] = ps1cal_query
             
             if use_clusters:
@@ -133,7 +133,7 @@ class _objtable_methods():
                     match_src_by_src = True
                 
                 if match_src_by_src:
-                    self.logger.info("Matching each source to the PS1 cal database.")
+                    self.logger.info("Matching each of the %d sources to the PS1 cal database."%(len(self.df)))
                     
                     # do the matching
                     match_to_PS1_kwargs['ids'] = ('srcID', self.df['srcID'])
@@ -145,25 +145,20 @@ class _objtable_methods():
                     self.df = self.df.merge(
                         ps1cp_df, on = 'srcID', how='left',  suffixes=['', '_ps1'])
                     
-                    
                     # if requested, drop sources without PS1cp
                     if clean_non_matches:
                         self.df.dropna(subset = ['dist2ps1'], inplace = True)
                         self.logger.info("dropping sources without match in PS1cal DB: %d retained."%
                             (len(self.df)))
-                    
-                    # update the grouped dataframe
-                    self.logger.info("updating cluster dataframe.")
-                    self.gdf = self.df.groupby('clusterID', sort = False)
-                    
-                    
-                    
-                    
             if plot:
                 # create diagnostic plot
                 fig, ax = plt.subplots()
-                h = ax.hist(self.gdf['dist2ps1'].max(), bins = 50, log = True)
-                ax.set_xlabel("cluster distance to PS1 calibrator [arcsec]")
+                if hasattr(self, 'gdf'):
+                    h = ax.hist(self.gdf['dist2ps1'].max(), bins = 50, log = True)
+                    ax.set_xlabel("cluster distance to PS1 calibrator [arcsec]")
+                else:
+                    h = ax.hist(self.df['dist2ps1'], bins = 50, log = True)
+                    ax.set_xlabel("source distance to PS1 calibrator [arcsec]")
                 fig.tight_layout()
                 self.save_fig(fig, '%s_match_to_PS1cal.png'%self.name)
                 plt.close()

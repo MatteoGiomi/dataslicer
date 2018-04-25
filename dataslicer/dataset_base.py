@@ -64,7 +64,6 @@ class dataset_base():
                     path of the directory where diag plots will be saved. 
                     It will be created if not existsing.
         """
-        self.logger.info("diagnostic plots will be saved to %s"%(plot_dir))
         if not os.path.isdir(plot_dir):
             os.makedirs(plot_dir)
         self.plot_dir = plot_dir
