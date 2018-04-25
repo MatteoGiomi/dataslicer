@@ -193,8 +193,8 @@ def match_to_PS1cal_fields():
         logging.warning("there are probably problems with the matching.")
 
 
-def match_to_PS1cal(ras, decs, rs_arcsec, ids, dbclient = None,
-    col2rm = ['rcid', 'field', '_id', 'hpxid_16'],  show_pbar = True, logger = None):
+def match_to_PS1cal(ras, decs, rs_arcsec, ids, ps1cal_query = None,
+    col2rm = ['rcid', 'field', '_id', 'hpxid_16'],  show_pbar = True):
     """
         given a list of coordinates, return a dataframe containing
         all the PS1 calibrator sources that matches to those positions.
@@ -209,9 +209,8 @@ def match_to_PS1cal(ras, decs, rs_arcsec, ids, dbclient = None,
                 search radius in arcseconds for the matching. Only PS1 sources that are less
                 than rs_arcsec away from one coordinate pair are retained.
             
-            dbclient: `pymongo.MongoClient`
-                pymongo client that manages the PS1 calibrators databae.
-                This is passed to extcats CatalogQuery object.
+            ps1cal_query: `extcats.CatalogQuery`
+                object that will take care of doing the PS1 matching.
             
             ids: `str` or (str, ids) tuple
                 ID of the sources to makes it possible to attach, to each coordinate pair,
@@ -226,9 +225,6 @@ def match_to_PS1cal(ras, decs, rs_arcsec, ids, dbclient = None,
                 names of columns in the PS1 calibrator catalogs to be excluded from the
                 resulting dataframe. If None, no PS1cal column is removed.
             
-            logger: `logggin.logger` or None
-                logger to use. If None, fall back to a default one.
-            
             show_pbar: `bool`
                 if you want to use tqdm to show fancy progress bars.
         
@@ -240,9 +236,10 @@ def match_to_PS1cal(ras, decs, rs_arcsec, ids, dbclient = None,
     """
     
     # initialize the catalog query object and grab the database
-    from extcats import CatalogQuery
-    ps1cal_query = CatalogQuery.CatalogQuery(
-        'ps1cal', 'ra', 'dec', dbclient = dbclient, logger = logger)
+    if ps1cal_query is None:
+        from extcats import CatalogQuery
+        ps1cal_query = CatalogQuery.CatalogQuery(
+            'ps1cal', 'ra', 'dec', dbclient = None, logger = None)
     
     if len(ras)!=len(decs):
         raise RuntimeError("ra/dec coordinate lists have different lengths.")

@@ -60,7 +60,6 @@ class _objtable_methods():
                             *dbclient: `pymongo.MongoClient`
                                 pymongo client that manages the PS1 calibrators databae.
                                 This is passed to extcats CatalogQuery object. Default is None
-                                
                     
                     plot: `bool`
                         if True, a disganostic plot showing the distribution of the 
@@ -70,6 +69,15 @@ class _objtable_methods():
             self.logger.info("matching objtable entries to PS1 calibrator stars")
             self.logger.info("using %s, %s as coordinates and a search radius of %.2f arcsec"%(
                 xname, yname, rs_arcsec))
+            
+            # make room for defaults
+            if match_to_PS1_kwargs is None:
+                match_to_PS1_kwargs = {}
+            
+            # initilaize the query object and pass it to the function.
+            ps1cal_query = CatalogQuery.CatalogQuery(
+                'ps1cal', 'ra', 'dec', dbclient = dbclient, logger = self.logger)
+            match_to_PS1_kwargs['ps1cal_query'] = ps1cal_query
             
             if use_clusters:
                 self.logger.info("Matching cluster centroids with the PS1 calibrators")
