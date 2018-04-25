@@ -8,7 +8,6 @@
 import pandas as pd
 from astropy.io import fits
 
-
 def fits_to_df(fitsfile, extension, select_columns = 'all', keep_array_cols = False, 
     select_rows = None, downcast = False, verbose = False):
     """
@@ -151,10 +150,132 @@ def subtract_dfs(df1, df2):
             how='left', indicator=True)
     return df1[df_all['_merge'] == 'left_only']
 
+
+# -------------------------------------------------- #
+#  functions that takes care of the PS1 calibrators  #
+# -------------------------------------------------- #
+
+
+def match_to_PS1cal_fields():
+    
+    raise NotImplementedError("FIELD based PS1 cal matching still to be done.")
+    # TODO: implement the following sketch for real
+    
+     # get the coordinates of all the calibrators for those fields
+    ps1srcs = [src for src in ps1cal_query.src_coll.find(
+    {'field': { "$in": fields}, 'rcid': {'$in': rcids}},
+    { '_id': 1, 'ra': 1, 'dec': 1 })]
+    match the object by coordinates: 
+    
+    # first find the closest calibrator for each object
+    coords = SkyCoord(self.tab[xname], self.tab[yname], **skycoords_kwargs)
+    ps1coords = SkyCoord(
+        ra = ps1cals['ra']*u.deg, dec = ps1cals['dec']*u.deg, **PS1skycoords_kwargs)
+    idps1, d2ps1, _  =  coords.match_to_catalog_sky(ps1coords)
+
+    # add these indexes and distances to the table
+    newcols = [Column(name = "PS1_ID", dtype = int, data = idps1),
+             Column(name = "D2PS1", data = d2ps1.to('arcsec').value, unit = 'arcsec')]
+    self.tab.add_columns(newcols)
+
+    # then select the matches that are more apart than sep
+    matches = self.tab[self.tab['D2PS1']<sep.to('arcsec').value]
+    logging.info("%d objects are within %.2f arcsec to a PS1 calibrator"%(
+        len(matches), sep.to('arcsec').value))
+
+    # finally group them accoring to the PS1 id.
+    cals = matches.group_by('PS1_ID')
+
+    # check that, no more than one object per dataset is
+    # associated to any PS1 calibrator
+    if np.any(np.diff(cals.indices)>len(self.hdf5paths)):
+        logging.warning(
+            "some PS1 calibrator has more than %d matches."%len(self.hdf5paths))
+        logging.warning("there are probably problems with the matching.")
+
+
+def match_to_PS1cal(ras, decs, rs_arcsec, dbclient = None, idkey = 'ps1id',
+    col2rm = ['rcid', 'field', '_id', 'hpxid_16'],  show_pbar = True, logger = None):
+    """
+        given a list of coordinates, return a dataframe containing
+        all the PS1 calibrator sources that matches to those positions.
+        
+        Pararameters:
+        -------------
+            
+            ras, decs: `array-like`
+                sky coordinates (Equatorial, J2000) for which you want to find the matches
+            
+            rs_arcsec: `float`
+                search radius in arcseconds for the matching. Only PS1 sources that are less
+                than rs_arcsec away from one coordinate pair are retained.
+            
+            dbclient: `pymongo.MongoClient`
+                pymongo client that manages the PS1 calibrators databae.
+                This is passed to extcats CatalogQuery object.
+            
+            id_key: `str`
+                name of column to use to identify sources matched to the same PS1 cal.
+                IF id_key == ps1id (default), the _id in the mongod of the PS1 cal cp
+                is used. Else the index of in the given coordinate pair.
+            
+            col2rm: `list`
+                names of columns in the PS1 calibrator catalogs to be excluded from the
+                resulting dataframe. If None, no PS1cal column is removed.
+            
+            logger: `logggin.logger` or None
+                logger to use. If None, fall back to a default one.
+            
+            show_pbar: `bool`
+                if you want to use tqdm to show fancy progress bars.
+        
+        Returns:
+        --------
+        
+            pandas.DataFrame with the found PS1cal sources, formatted according to 
+            col2rm and id_key.
+    """
+    
+    # initialize the catalog query object and grab the database
+    from extcats import CatalogQuery
+    ps1cal_query = CatalogQuery.CatalogQuery(
+        'ps1cal', 'ra', 'dec', dbclient = dbclient, logger = logger)
+    
+    if len(ras)!=len(decs):
+        raise RuntimeError("ra/dec coordinate lists have different lengths.")
+    
+    # loop on the coordinate pairs and create list of dictionaries
+    ps1cps = []
+    if show_pbar:
+        import tqdm
+        coord_iter = tqdm.tqdm(range(len(ras)))
+    else:
+        coord_iter = range(len(ras))
+    for ic in coord_iter:
+        ps1match =  ps1cal_query.findclosest(ra = ras[ic], dec = decs[ic], 
+            rs_arcsec = rs_arcsec, method = 'healpix')
+            
+        # if you have a cp, add it to the list
+        if ps1match != (None, None):
+            buff = {}
+            for c in ps1match[0].colnames:
+                if (not col2rm is None) and (c not in col2rm):     # remove unwanted columns
+                    buff[c] = ps1match[0][c]
+            buff['dist2ps1'] = ps1match[1]
+            id_val = ic
+            if idkey == 'ps1id':
+                id_val = ps1match['_id']
+            buff[idkey] = id_val        # this will be used to join the df
+            ps1cps.append(buff)
+                
+    # merge the dataframe
+    ps1cp_df = downcast_df(pd.DataFrame(ps1cps))
+    return ps1cp_df
+
+
 # -------------------------------------- #
 #  functions that opearate on df groups  #
 # -------------------------------------- #
-
 
 def cluster_op(gdf, col, function):
     """
