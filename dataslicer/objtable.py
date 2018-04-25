@@ -98,7 +98,7 @@ class objtable(dataset_base, _objtable_methods):
                     buff['OBSID'] = pd.Series( [obsid]*len(buff), dtype = int)
                     buff['srcID'] = (
                         buff['OBSID'].astype(str) +
-                        df['sourceid'].astype(str)).astype(int)
+                        buff['sourceid'].astype(str)).astype(int)
                 frames.append(buff)
         self.df = pd.concat(frames)
         end = time.time()
