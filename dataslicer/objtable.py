@@ -8,6 +8,7 @@
 import time, tqdm
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
 
 #import dataslicer.df_utils as df_utils
@@ -38,11 +39,15 @@ class objtable(dataset_base, _objtable_methods):
     def read_csv(self, **args):
         self._read_csv(tag = 'objtable', **args)
 
-
     def _check_for_gdf(self):
         if not hasattr(self, 'gdf'):
             raise AttributeError("this object has no grouped dataframe.")
 
+    # eventually update the grouped dataframe
+    def update_gdf(self, key = 'clusterID'):
+        if hasattr(self, 'gdf'):
+            self.logger.info("updating grouped dataframe")
+            self.gdf = self.df.groupby(key, sort = False)
 
     def load_data(self, target_metadata_df = None, add_obs_id = True, **fits_to_df_args):
         """
@@ -191,9 +196,9 @@ class objtable(dataset_base, _objtable_methods):
         return (self.gdf[xname].mean(), self.gdf[yname].mean())
 
 
-    def calmag(self, mag_col, err_mag_col, calmag_col = None, zp_name = 'MAGZP', 
+    def calmag(self, mag_col, err_mag_col = None, calmag_col = None, zp_name = 'MAGZP', 
         clrcoeff_name = 'CLRCOEFF', zp_err = 'MAGZPUNC', clrcoeff_err = 'CLRCOUNC',
-        ps1_color1 = None, ps1_color2 = None, dropmag = False):
+        ps1_color1 = None, ps1_color2 = None, dropmag = False, plot = True):
         """
             apply photometric calibration to magnitude. The formula used is
             
@@ -236,7 +241,10 @@ class objtable(dataset_base, _objtable_methods):
                 
                 dropmag: `bool`
                     if True the df column magname will be dropped.
-                    
+                
+                plot: `bool`
+                    if True, a diagnostic plot showing the histogram of the magnitudes
+                    and their errors is created in plotdir.
         """
         
         self.logger.info("Applying photometric calibration.")
@@ -264,30 +272,44 @@ class objtable(dataset_base, _objtable_methods):
         # fill them
         if clrcoeff_name is None:
             self.df[calmag_col] = self.df[mag_col] + self.df[zp_name]
+            
             if not err_mag_col is None:
                 self.df[err_calmag_col] = np.sqrt(
                                     self.df[err_mag_col]**2. +
                                     self.df[zp_err]**2.)
         else:
+            ps1_color = self.df[ps1_color1] - self.df[ps1_color2]
             self.df[calmag_col] = (
                 self.df[mag_col] + 
                 self.df[zp_name] +
-                self.df[clrcoeff_name]*(self.df[ps1_color1] - self.df[ps1_color2])
-                                   )
+                self.df[clrcoeff_name]*ps1_color)
+            
             if not err_mag_col is None:
+                d_ps1_color = np.sqrt( self.df['e_'+ps1_color1]**2. + self.df['e_'+ps1_color2]**2. )
                 self.df[err_calmag_col] = np.sqrt(
                     self.df[err_mag_col]**2. +
                     self.df[zp_err]**2. +
-#                    (self.df[clrcoeff_err] * (self.df[ps1_color1] - self.df[ps1_color2]))**2. + 
-                    (self.df[clrcoeff_name]**2) * (self.df['e_'+ps1_color1]**2. + self.df['e_'+ps1_color2]**2.)
-                                                  )
+                    (self.df[clrcoeff_err] * ps1_color)**2. + 
+                    (self.df[clrcoeff_name] * d_ps1_color)**2)
         
         # eventually get rid of the uncalibrated stuff
         if dropmag:
-            logging.info("dropping non calibrated magnitude %s from dataframe"%mag_col)
+            self.logger.info("dropping non calibrated magnitude %s from dataframe"%mag_col)
             self.df.drop(columns = [mag_col])
         
-        # TODO: diagnostic plot with the pool distribution
+        if plot:
+            
+            fig, ax = plt.subplots()
+            if err_mag_col is None:
+                ax.hist(self.df[calmag_col], bins = 100)
+                ax.set_xlabel("calibrated magnitude [mag]")
+            else:
+                ax.scatter(self.df[calmag_col], self.df[err_calmag_col])
+                ax.set_xlabel("calibrated magnitude [mag]")
+                ax.set_ylabel("error on calibrated magnitude [mag]")
+            fig.tight_layout()
+            self.save_fig(fig, '%s_calmag.png'%self.name)
+            plt.close()
 
 
     def compute_camera_coord(self, rc_x_name, rc_y_name, cam_x_name = 'cam_xpos', 
@@ -297,6 +319,7 @@ class objtable(dataset_base, _objtable_methods):
             start at the bottom-left corner of the camera (RC 14)
             
             Parameters:
+            -----------
                 
                 rc_x[y]_name: `str`
                     name of dataframe column containg the position of the sources 
@@ -313,7 +336,7 @@ class objtable(dataset_base, _objtable_methods):
         """
         
         # dimension of a RC in pixels
-        xsize, ysize = 3080, 3072
+        xsize, ysize = 3072, 3080
         
         # checks
         check_col([rc_x_name, rc_y_name, rcid_name], self.df)
@@ -343,7 +366,94 @@ class objtable(dataset_base, _objtable_methods):
         
         # TODO: rotation?
         
-        # eventually update the grouped dataframe
-        if hasattr(self, 'gdf'):
-            self.logger.info("updating grouped dataframe")
-            self.gdf = self.df.groupby('clusterID', sort = False)
+        # update grouped df
+        self.update_gdf()
+
+
+    def trim_edges(self, x_name, y_name, trim_dist):
+        """
+            remove sources wich are close to the edge of a RC. The channels
+            are 3070 x 3078 pixels. This will retain only the sources for which
+            dist_x < x_name < 3070 - dist_x and dist_y < y_name < 3078 - dist_y
+            
+            Parameters:
+            -----------
+                
+                x[y]_name: `str`
+                    name of dataframe column containg the position of the sources 
+                    in pixel on the readout channel (RC)
+                
+                trim_dist: `float` or array-like
+                    minimum distance (in pixels) from the edge of the RC.
+            
+            Returns:
+            --------
+                
+                pandas.DataFrame with the rejected sources.
+        """
+        check_col([x_name, y_name], self.df)
+        
+        if type(exclude_dist) == float:
+            dx = trim_dist
+            dy = dist_x
+        elif len(exclude_dist) == 2:
+            dx = trim_dist[0]
+            dy = trim_dist[1]
+        else:
+            raise ValueError("parameter exclude_dist must be float or [dist_x, dist_y].")
+        
+        xsize, ysize = 3072, 3080
+        query = "(@dx < @x_name < (@xsize - @dx)) and (@dy < @y_name < (@ysize - @dy))"
+        rej_df = self.query_df(exp = query, inplace = True)
+        
+        self.update_gdf()
+        return rej_df
+
+
+    def tag_dust(dust_df_file, radius_multiply = 1., xname = 'xpos', yname = 'ypos', remove_dust = False):
+        """
+            tag objects whose x/y position on the CCD quadrant falls on top
+            of a dust grain.
+            
+            Parameters:
+            -----------
+                
+                dust_df_file: `str`
+                    path to a csv file containing x, y, and radius for all the dust
+                    grain found in the image. This file is created by ztfimgtoolbox.get_dust_shapes
+                
+                radius_mulitply: `float`
+                    factor to enlarge/shrink the dust grain radiuses.
+                
+                x[y]name: `str`
+                    name of this object df columns describing the x/y position of the objects.
+                
+                remove_dust: `bool`
+                    if True, objects falling on the dust will be removed from the dataframe.
+            
+            Returns:
+            --------
+                
+                pandas.DataFrame containing the objects contaminated by dust.
+        """
+        
+        from shapely.geometry import MultiPoint
+        
+        # read in the df file and create the geometrical objects
+        dust_df = pd.read_csv(dust_df_file)
+        centers = dust_df[['x', 'y']].as_matrix()
+        radiuses = radius_mulitply * dust_df['r']
+        print (centers[:5])
+        print (radiuses[:5])
+        print (dust_df['r'][:5])
+        
+        dust_grains = MultiPoints(centers)
+        dust_grains = dust_grains.buffer(radiuses)
+        self.logger.info("read %d dust grains from file %s"%(len(dust_grains), dust_df_file))
+        
+        # now the source positions
+        srcs_xy = self.df[[xname, yname]].as_matrix()
+        srcs = MultiPoints(srcs_xy)
+        mask = srcs.within(dust_grains)
+        print (mask)
+

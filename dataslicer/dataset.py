@@ -15,7 +15,7 @@ from dataslicer.dataset_base import dataset_base, select_kwargs
 from dataslicer.metadata import metadata
 from dataslicer.objtable import objtable
 from astropy.io import fits
-
+from dataslicer.df_utils import strlist_in_strlist
 
 class dataset(dataset_base):
     """
@@ -23,7 +23,6 @@ class dataset(dataset_base):
         and the associated metadata.
     """
     
-#    def __init__(self, name, datadir, fext  =  ".fits", logger = None, **load_meta_args):
     def __init__(self, name, datadir, fext  =  ".fits", logger = None):
         """
             Parameters
@@ -50,10 +49,6 @@ class dataset(dataset_base):
         # init parent class
         dataset_base.__init__(self, name, datadir, fext, logger = self.logger)
         self.logger.info("found %d .%s files in directory: %s"%(len(self.files), self.fext, self.datadir))
-        
-        # load metadata
-#        self.load_metadata(**load_meta_args)
-#        self._check_for_metadata()
 
 
     def load_metadata(self, metadata_file = None, force_reload = False, meta_tocsv = True, **args):
@@ -88,7 +83,8 @@ class dataset(dataset_base):
             self.metadata.read_csv(fname = metadata_file, **args)
             read_from_fits = False
             hk = args.get('header_keys', None)
-            if ( hk is not None and not set(hk).issubset(set(self.metadata.df.columns.values)) ):
+#            if ( hk is not None and not set(hk).issubset(set(self.metadata.df.columns.values)) ):
+            if (hk is not None) and (not strlist_in_strlist(hk, self.metadata.df.columns.values)):
                 self.logger.info("requested columns are different from those found in file. Reloading it.")
                 read_from_fits = True
         if read_from_fits:
@@ -137,7 +133,8 @@ class dataset(dataset_base):
             if req_cols == 'all':
                 head0 = fits.getheader(self.files[0], args['extension'])
                 req_cols = [cname for key, cname in head0.items() if 'TTYPE' in key]
-            if ( req_cols is not None and not set(req_cols).issubset(set(self.objtable.df.columns.values)) ):
+#            if ( req_cols is not None and not set(req_cols).issubset(set(self.objtable.df.columns.values)) ):
+            if ( req_cols is not None) and (not strlist_in_strlist(req_cols, self.objtable.df.columns.values)):
                 self.logger.info("requested columns are different from those found in file. Reloading it.")
                 read_from_fits = True
         
@@ -232,7 +229,7 @@ class dataset(dataset_base):
             raise KeyError("Merge on column %s not present in metadata dataframe"%join_on)
         
         # skimm out metadata columns
-        if join_on not in metadata_cols:
+        if (not metadata_cols is None) and (join_on not in metadata_cols):
             metadata_cols.append(join_on)
         if metadata_cols is None:
             meta_2_join = self.metadata.df

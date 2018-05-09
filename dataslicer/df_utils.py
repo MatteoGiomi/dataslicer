@@ -104,6 +104,39 @@ def check_col(col, df):
             raise KeyError("column %s not present in objtable dataframe. Availables are: %s"%
                 (c, ", ".join(df_cols.values)))
 
+def stringinlist(key, list_of_keys):
+    """
+        check if a string key is present at least once in list_of_keys.
+        This supports '*' as wildchar: 
+            
+            >> ll = ['apple_gala', 'fuffa', 'apple_fuji', 'bananas']
+            >> stringinlist('appl*', ll)
+            >> True
+            >> stringinlist('app', ll)
+            >> False
+            >> stringinlist('fuffa', ll)
+            >> True
+            >> stringinlist('fu*', ll)
+            >> True
+    """
+    if '*' in key:
+        mk = key.replace('*', '')
+        return any([mk in key_from_list for key_from_list in list_of_keys])
+    else:
+        return (key in list_of_keys)
+
+def strlist_in_strlist(strlist1, strlist2):
+    """
+        check if strlist1 is contained in strlist2. Primitive wildchar support.
+    """
+    ifound = 0
+    for str1 in strlist1:
+        if stringinlist(str1, strlist2):
+            ifound += 1
+    if ifound == len(strlist1):
+        return True
+    else:
+        return False
 
 def downcast_df(df, verbose = False):
     """
@@ -150,6 +183,79 @@ def subtract_dfs(df1, df2):
             how='left', indicator=True)
     return df1[df_all['_merge'] == 'left_only']
 
+
+
+def tag_dust(df, dust_df_file, radius_multiply = 1., xname = 'xpos', yname = 'ypos',
+    dust_df_query = None, remove_dust = False):
+        """
+            tag objects in df whose x/y position on the CCD quadrant falls on top
+            of a dust grain.
+            
+            Parameters:
+            -----------
+                
+                dust_df_file: `str`
+                    path to a csv file containing x, y, and radius for all the dust
+                    grain found in the image. This file is created by ztfimgtoolbox.get_dust_shapes
+                
+                radius_mulitply: `float`
+                    factor to enlarge/shrink the dust grain radiuses.
+                
+                x[y]name: `str`
+                    name of this object df columns describing the x/y position of the objects.
+                
+                dust_df_query: `str`
+                    string to select dust grains to consider. Eg:
+                        "(dx < x < (3072 - dx)) and (dy < ypos < (3080 - dy))"
+                
+                remove_dust: `bool`
+                    if True, objects falling on the dust will be removed from the dataframe.
+            
+            Returns:
+            --------
+                
+                pandas.DataFrame containing the objects contaminated by dust.
+        """
+        
+        from shapely.geometry import Point
+        from shapely import vectorized
+        
+        # read in the df file with the dust grains
+        dust_df = pd.read_csv(dust_df_file)
+        if not dust_df_query is None:
+            dust_df.query(dust_df_query, inplace = True)
+        print ("read position of %d dust grains from file: %s"%(len(dust_df), dust_df_file))
+        
+        # sort the dust dataframe by dust size, smaller first. This way, in case of
+        # close-by dust grains, the source is assigned to the largest one.
+        dust_df = dust_df.sort_values('r')
+        
+        # loop on the dust grains and match them to the sources
+        print ("matching sources %d objects with %d dust grains.."%(len(df), len(dust_df)))
+        for _, d in dust_df.iterrows():
+            
+            # create the geometrical object for this dust grain
+            dust_g = Point(d['x'], d['y']).buffer( (radius_multiply * d['r']) )
+            
+            # find out all the sources that matches this dust grain
+            flagin = vectorized.contains(dust_g, df[xname], df[yname])
+#            print ("found %d sources inside a dust grain of radius: %.2f"%(sum(flagin), d['r']))
+            
+            # add the dust property to the dataframe
+            df.loc[flagin, 'dust_x'] = d['x']
+            df.loc[flagin, 'dust_y'] = d['y']
+            df.loc[flagin, 'dust_r'] = d['r']
+        
+        dust_matches = df.count()['dust_r']
+        print ("found %d sources on top of dust grains."%(dust_matches))
+        
+        # split the dataframe into dust and non-dust, eventually remove 
+        # the dust from the source dataframe
+        srcs_w_dust = df.dropna(axis=0, subset = ['dust_r'])
+        if remove_dust:
+            df = df[df['dust_r'].isna()]
+            print ("removing sources affected by dust. %d retained."%(len(df)))
+        return df, srcs_w_dust
 
 # -------------------------------------------------- #
 #  functions that takes care of the PS1 calibrators  #

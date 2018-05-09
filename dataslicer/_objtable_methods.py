@@ -297,7 +297,7 @@ class _objtable_methods():
         return (outl_df)
 
 
-    def select_clusters(self, cond):
+    def select_clusters(self, cond, plot_x = None, plot_y = None, **plt_kwargs):
         """
             remove the clusters and corresponding sources from the dataframe unless
             a given condition is satisfied by all the member of the cluster.
@@ -309,8 +309,13 @@ class _objtable_methods():
                     condition that all the member of a cluster have to satisfy in order
                     not to be rejected.
                 
-                plot: `bool`
-                    if you want to visualize the result of the procedure.
+                plot_x/plot_y: `str` or None
+                    if you want to visualize the result of the procedure as a 1d hist
+                    (plot_x != None and plot_y == None) or a scatter plot (both plot_x and 
+                    plot_y not None).
+                
+                plt_kwargs:
+                    kwargs for plot. 
             
             Returns:
             --------
@@ -334,6 +339,25 @@ class _objtable_methods():
         
         # remove all the sources contained in these clusters and go
         self.df.query("clusterID not in @bad_cluster_ids", inplace = True)
-        self.gdf = self.df.groupby('clusterID', sort = False)
+        self.update_gdf()
         self.logger.info("%d sources and %d clusters retained."%(len(self.df), len(self.gdf)))
+        
+        if not (plot_x is None and plot_y is None):
+            fig, ax = plt.subplots()
+            if plot_y is None:
+                pngname = "select_clusters_hist_%s"%plot_x
+                ax.hist(self.df[plot_x], label = "accepted", **plt_kwargs)
+                ax.hist(rejected[plot_x], label = "rejected", **plt_kwargs)
+                ax.set_xlabel(plot_x)
+            else:
+                pngname = "select_clusters_scatter_%s_vs_%s"%(plot_x, plot_y)
+                ax.scatter(self.df[plot_x], self.df[plot_y], label = "accepted", **plt_kwargs)
+                ax.scatter(rejected[plot_x], rejected[plot_y], label = "accepted", **plt_kwargs)
+                ax.set_xlabel(plot_x)
+                ax.set_ylabel(plot_y)
+            ax.set_title(cond)
+            ax.legend()
+            fig.tight_layout()
+            self.save_fig(fig, '%s_%s'%(self.name, pngname))
+            plt.close()
         return rejected
