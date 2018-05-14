@@ -356,7 +356,7 @@ class _objtable_methods():
                 ax.set_xlabel(plot_x)
                 ax.set_ylabel(plot_y)
             ax.set_title(cond)
-            ax.legend()
+            fig.legend()
             fig.tight_layout()
             self.save_fig(fig, '%s_%s'%(self.name, pngname))
             plt.close()
