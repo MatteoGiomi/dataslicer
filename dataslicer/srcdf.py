@@ -14,11 +14,12 @@ import numpy as np
 import logging
 logging.basicConfig(level = logging.INFO)
 
-from dataslicer.df_utils import match_to_PS1cal
+from dataslicer.df_utils import match_to_PS1cal, fits_to_df
 
 class srcdf(pd.DataFrame):
     """
-        a dataframe with style.
+        a dataframe with style. Eg, you can read in a fits file with:
+        sdf = srcdf.read_fits(fitsfile, extension)
     """
     
     # dimension of a RC in pixels
@@ -29,6 +30,32 @@ class srcdf(pd.DataFrame):
         return srcdf
 
     # TODO: port cluster_source methods from objtable
+    
+    
+    @staticmethod
+    def read_fits(fitsfile, extension, **kwargs):
+        """
+            read a fits file into a srcdf object and returns it.
+            
+            Parameters:
+            -----------
+                
+                fitsfile: `str`
+                valid path to the file you want to read.
+                
+                extension: `str` or `int`
+                    extension to be read. This will be the second parameter
+                    passed to astropy.io.fits.getdata
+                
+                kwargs: `kwargs`
+                    other arguments to be passed directly to dataslicer.df_utils.fits_to_df
+            
+            Returns:
+            -------
+                srcdf.
+        """
+        return srcdf(fits_to_df(fitsfile, extension, **kwargs))
+    
 
     def match_to_PS1Cal(self, rs_arcsec, ids = "sid", xname = 'ra', yname = 'dec', 
         clean_non_matches = True, logger = None, **kwargs):
