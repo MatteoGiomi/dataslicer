@@ -25,13 +25,15 @@ class srcdf(pd.DataFrame):
     # dimension of a RC in pixels
     xsize, ysize = 3072, 3080
     
+    # a dataframe proper has no logger, so this can't be an attribute
+    _class_logger = logging.getLogger(__name__)
+    
+    
     @property
     def _constructor(self):
         return srcdf
 
-    # TODO: port cluster_source methods from objtable
-    
-    
+
     @staticmethod
     def read_fits(fitsfile, extension, **kwargs):
         """
@@ -55,9 +57,75 @@ class srcdf(pd.DataFrame):
                 srcdf.
         """
         return srcdf(fits_to_df(fitsfile, extension, **kwargs))
-    
 
-    def match_to_PS1Cal(self, rs_arcsec, ids = "sid", xname = 'ra', yname = 'dec', 
+
+    def add(self, other_df, reindex = True, srcid_key = 'sourceid', inplace = True, logger = None):
+        """
+            add another dataframe of source dataframe to this object.
+            
+            Parameters:
+            -----------
+            
+                other_df: `pandas.DataFrame` or `dataslicer.srcdf.srcdf`
+                    dataframe to add.
+                
+                reindex: `bool`
+                    weather or not the sourceid key has to be recomputed for the
+                    new dataframe.
+                
+                srcid_key: `str`
+                    key with the soucre identified that has to be re-indexed.
+                
+                inplace: `bool`
+                    if True, the second df will be added to this object and None
+                    will be returned. If False, return a new dataframe.
+                
+                logger: `logging.logger`
+                    logger instance.
+                
+                Returns:
+                --------
+                    
+                    srcdf or None, depending on the value of inplace
+                    
+        """
+        
+        if logger is None:
+            logger = srcdf._class_logger
+        
+        merged = srcdf(pd.concat([self, other_df], ignore_index = True))
+        if reindex:
+            merged.reindex_sources(srcid_key, logger = logger)
+        
+        if inplace:
+            self = merged
+        else:
+            return merged
+
+
+    def reindex_sources(self, srcid_key = 'sourceid', logger = None):
+        """
+            Assign to the srcid column the values of the pandas dataframe index. 
+            In this way, the sources remains uniquely identified even if multiple
+            catalogs are loaded into the same object.
+            
+            Parameters:
+            -----------
+                
+                srcid_key: `str`
+                    name of the column containing the sourceid that you need to re-index.
+                
+                logger: `logging.logger`
+                    logger instance.
+        """
+        
+        if logger is None:
+            logger = srcdf._class_logger
+        logger.info("re-indexing %s column using the DataFrame index values."%(srcid_key))
+        self[srcid_key] = self.index.values
+
+
+    def match_to_PS1Cal(self, rs_arcsec, ids = 'sourceid', xname = 'ra', yname = 'dec', 
         clean_non_matches = True, logger = None, **kwargs):
         """
             for each source in this object, search for matching in the PS1Cal
@@ -94,7 +162,7 @@ class srcdf(pd.DataFrame):
         """
         
         if logger is None:
-            logger = logging.getLogger(__name__)
+            logger = srcdf._class_logger
         
         # get a dataframe with the matches.
         logger.info("Matching %d sources to PS1Cal stars. Using %s and %s as coordinates."%
@@ -115,7 +183,7 @@ class srcdf(pd.DataFrame):
         if clean_non_matches:
             self.dropna(subset = ['dist2ps1'], inplace = True)
             logger.info("dropping sources without match in PS1cal DB: %d retained."%
-                (len(self.df)))
+                (len(self)))
 
     def photometric_solution(self):
         """
@@ -286,7 +354,7 @@ class srcdf(pd.DataFrame):
         """
         
         if logger is None:
-            logger = logging.getLogger(__name__)
+            logger = srcdf._class_logger
         
         # checks
         check_col([rc_x_name, rc_y_name, rcid_name], self)
@@ -393,7 +461,7 @@ class srcdf(pd.DataFrame):
             """
             
             if logger is None:
-                logger = logging.getLogger(__name__)
+                logger = srcdf._class_logger
             
             from shapely.geometry import Point
             from shapely import vectorized
