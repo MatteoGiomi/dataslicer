@@ -437,23 +437,12 @@ class objtable(dataset_base, _objtable_methods):
                 pandas.DataFrame containing the objects contaminated by dust.
         """
         
-        from shapely.geometry import MultiPoint
+        raise NotImplementedError("To be re-written using srcdf")
         
         # read in the df file and create the geometrical objects
-        dust_df = pd.read_csv(dust_df_file)
-        centers = dust_df[['x', 'y']].as_matrix()
-        radiuses = radius_mulitply * dust_df['r']
-        print (centers[:5])
-        print (radiuses[:5])
-        print (dust_df['r'][:5])
-        
-        dust_grains = MultiPoints(centers)
-        dust_grains = dust_grains.buffer(radiuses)
-        self.logger.info("read %d dust grains from file %s"%(len(dust_grains), dust_df_file))
-        
-        # now the source positions
-        srcs_xy = self.df[[xname, yname]].as_matrix()
-        srcs = MultiPoints(srcs_xy)
-        mask = srcs.within(dust_grains)
-        print (mask)
-
+#        dust_df = pd.read_csv(dust_df_file)
+#        centers = dust_df[['x', 'y']].as_matrix()
+#        radiuses = radius_mulitply * dust_df['r']
+#        print (centers[:5])
+#        print (radiuses[:5])
+#        print (dust_df['r'][:5])
