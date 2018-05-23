@@ -361,3 +361,186 @@ class _objtable_methods():
             self.save_fig(fig, '%s_%s'%(self.name, pngname))
             plt.close()
         return rejected
+
+
+# --------------------------------------- #
+# boneyard. I'm too cicken to delete them #
+# these were the objtable method before   #
+# the srcdf revolution.                   #
+# --------------------------------------- #
+
+
+#    def calmag(self, mag_col, err_mag_col = None, calmag_col = None, zp_name = 'MAGZP', 
+#        clrcoeff_name = 'CLRCOEFF', zp_err = 'MAGZPUNC', clrcoeff_err = 'CLRCOUNC',
+#        ps1_color1 = None, ps1_color2 = None, dropmag = False, plot = True):
+#        """
+#            apply photometric calibration to magnitude. The formula used is
+#            
+#            
+#            Mcal = Minst + ZP_f + c_f*(M1_PS1 -M2_PS1)
+#            
+#            where Minst is the instrumental magnitude, ZP_f , c_f are the image-wise
+#            zero point and color coefficient (MAGZP,CLRCOEFF), and (M1_PS1-M2_PS1)
+#            is the color of the source in the PS1 system. The filter used are defined
+#            by the header key PCOLOR.
+#            
+#            IMPORTANT: the above formula can be applied ONLY to PSF-fit catalogs.
+#            
+#            Parameters:
+#            -----------
+#            
+#                mag_col: `str`
+#                    name of the magnitude column you want to calibrate.
+#                
+#                err_mag_col: `str` or None
+#                    name of the columns containing the error on mag_col. If None, 
+#                    error on the calibrated magnitudes will not be computed. 
+#                
+#                calmag_col: `str` or None
+#                    name of the column in the dataframe which will host the
+#                    calibrated magnitude value and its error. If calmag_col is None, 
+#                    defaults to: cal_+mag_col. If the error is computed, the name of
+#                    the columns containting it will be err_calmag_col
+#                
+#                zp_name/clrcoeff_name: `str` or None
+#                    name of ZP and color coefficient term. If clrcoeff_name is None, 
+#                    color correction will be ignored.
+#                
+#                zp_err/clrcoeff_err: `str`
+#                    name of columns containing the error on the ZP and color coefficient.
+#                
+#                ps1_color1[2]: `str` or array-like
+#                    If strings, these are the names of the PS1cal magnitudes used
+#                    to calibrate (they should be consistent with PCOLOR).
+#                    If array-like they should have the same length of the dataframe.
+#                
+#                dropmag: `bool`
+#                    if True the df column magname will be dropped.
+#                
+#                plot: `bool`
+#                    if True, a diagnostic plot showing the histogram of the magnitudes
+#                    and their errors is created in plotdir.
+#        """
+#        
+#        self.logger.info("Applying photometric calibration.")
+#        
+#        # see what columns are needed
+#        needed_cols = [mag_col, zp_name]
+#        if clrcoeff_name is None:
+#            self.logger.warning("color correction will not be applied")
+#        else:
+#            needed_cols.extend([clrcoeff_name])
+#            if type(ps1_color1) == str and type(ps1_color2) == str:
+#                needed_cols.extend([ps1_color1, ps1_color2])
+#        if not err_mag_col is None:
+#            needed_cols.extend([zp_err, clrcoeff_err, err_mag_col])
+#        
+#        check_col(needed_cols, self.df)
+#        for k in needed_cols:
+#            check_col(k, self.df)
+#        
+#        # name the cal mag column and the one for the error
+#        if calmag_col is None:
+#            calmag_col = "cal_"+mag_col
+#        err_calmag_col = "err_"+calmag_col
+#        
+#        # fill them
+#        if clrcoeff_name is None:
+#            self.df[calmag_col] = self.df[mag_col] + self.df[zp_name]
+#            
+#            if not err_mag_col is None:
+#                self.df[err_calmag_col] = np.sqrt(
+#                                    self.df[err_mag_col]**2. +
+#                                    self.df[zp_err]**2.)
+#        else:
+#            ps1_color = self.df[ps1_color1] - self.df[ps1_color2]
+#            self.df[calmag_col] = (
+#                self.df[mag_col] + 
+#                self.df[zp_name] +
+#                self.df[clrcoeff_name]*ps1_color)
+#            
+#            if not err_mag_col is None:
+#                d_ps1_color = np.sqrt( self.df['e_'+ps1_color1]**2. + self.df['e_'+ps1_color2]**2. )
+#                self.df[err_calmag_col] = np.sqrt(
+#                    self.df[err_mag_col]**2. +
+#                    self.df[zp_err]**2. +
+#                    (self.df[clrcoeff_err] * ps1_color)**2. + 
+#                    (self.df[clrcoeff_name] * d_ps1_color)**2)
+#        
+#        # eventually get rid of the uncalibrated stuff
+#        if dropmag:
+#            self.logger.info("dropping non calibrated magnitude %s from dataframe"%mag_col)
+#            self.df.drop(columns = [mag_col])
+#        
+#        if plot:
+#            
+#            fig, ax = plt.subplots()
+#            if err_mag_col is None:
+#                ax.hist(self.df[calmag_col], bins = 100)
+#                ax.set_xlabel("calibrated magnitude [mag]")
+#            else:
+#                ax.scatter(self.df[calmag_col], self.df[err_calmag_col])
+#                ax.set_xlabel("calibrated magnitude [mag]")
+#                ax.set_ylabel("error on calibrated magnitude [mag]")
+#            fig.tight_layout()
+#            self.save_fig(fig, '%s_calmag.png'%self.name)
+#            plt.close()
+
+
+#    def compute_camera_coord(self, rc_x_name, rc_y_name, cam_x_name = 'cam_xpos', 
+#        cam_y_name = 'cam_ypos', xgap_pix = 7, ygap_pix = 10, rcid_name = 'RCID'):
+#        """
+#            compute the camera-wide x/y coordinates of the sources. The x,y position
+#            start at the bottom-left corner of the camera (RC 14)
+#            
+#            Parameters:
+#            -----------
+#                
+#                rc_x[y]_name: `str`
+#                    name of dataframe column containg the position of the sources 
+#                    in pixel on the readout channel (RC)
+#                
+#                cam_x[y]_name: `str`
+#                    name of the columns that will contain the camera-wide coordinates.
+#                
+#                x[y]gap_pix: `int`
+#                    size of gap between CCDs, in pixels.
+#                
+#                rcid_name: `str`
+#                    name of column containing the ID of the readout-channels (0 to 63).
+#        """
+#        
+#        # dimension of a RC in pixels
+#        xsize, ysize = 3072, 3080
+#        
+#        # checks
+#        check_col([rc_x_name, rc_y_name, rcid_name], self.df)
+#        
+#        # compute ccd and quadrant (1 to 4) from RC
+#        ccd = (self.df[rcid_name]//4 + 1).rename('ccd')
+#        q = (self.df[rcid_name]%4 + 1).rename('q')
+
+#        # arrange the rc in rows and cols based on ccd and q.
+#        # NOTE: the returned values are zero-indexed (from 0 to 7) and 
+#        # start from the bottom-left corner of the image, so that RC 14 is
+#        # at position (0, 0) and RC 48 at (7, 7).
+#        yrc= 2*((ccd-1)//4) + 1*np.logical_or(q==1, q==2)
+#        xrc= 2*( 4-(ccd-1)%4)-1 - 1*np.logical_or(q==2, q==3)
+#        
+#        # now add the gaps between the ccds, and the rc size in pixels 
+#        # so that you have the x/y camera position of the lower-left corner of the RCs
+#        # of the readout channels
+#        xll = (xrc // 2)*xgap_pix + xrc*xsize
+#        yll = (yrc // 2)*ygap_pix + yrc*ysize
+#        
+#        # finally add the x/y position inside each RC
+#        self.df[cam_x_name] = xll + self.df[rc_x_name]
+#        self.df[cam_y_name] = yll + self.df[rc_y_name]
+#        self.logger.info("computed camera-wide coordinates of the sources as columns: %s %s of the dataframe"%
+#            (cam_x_name, cam_y_name))
+#        
+#        # TODO: rotation?
+#        
+#        # update grouped df
+#        self.update_gdf()
+

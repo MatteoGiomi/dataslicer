@@ -14,7 +14,7 @@ import numpy as np
 import logging
 logging.basicConfig(level = logging.INFO)
 
-from dataslicer.df_utils import match_to_PS1cal, fits_to_df
+from dataslicer.df_utils import match_to_PS1cal, fits_to_df, check_col
 
 class srcdf(pd.DataFrame):
     """
@@ -210,9 +210,9 @@ class srcdf(pd.DataFrame):
         
         pass
 
-    def calmag(self, mag_col, err_mag_col = None, calmag_col = None, zp_name = 'MAGZP', 
-        clrcoeff_name = 'CLRCOEFF', zp_err = 'MAGZPUNC', clrcoeff_err = 'CLRCOUNC',
-        ps1_color1 = None, ps1_color2 = None, dropmag = False, plot = True):
+    def calmag(self, mag_col, zp, zp_err = None, err_mag_col = None, calmag_col = None, 
+        clrcoeff = None, clrcoeff_err = None, ps1_color1 = None, ps1_color2 = None, 
+        e_ps1_color1 = None, e_ps1_color2 = None, logger = None):
         """
             apply photometric calibration to magnitude. The formula used is
             
@@ -236,46 +236,33 @@ class srcdf(pd.DataFrame):
                     name of the columns containing the error on mag_col. If None, 
                     error on the calibrated magnitudes will not be computed. 
                 
-                calmag_col/err_mag_col: `str` or None
+                zp/clrcoeff: `float`, or `array-like`
+                    value(s) of ZP and color coefficient term. If clrcoeff_name is None, 
+                    color correction will be ignored.
+                
+                zp_err/clrcoeff_err: `float`, or `array-like`
+                    value(s) of the errors on ZP and the color coefficient term.
+                
+                calmag_col: `str` or None
                     name of the column in the dataframe which will host the
-                    calibrated magnitude value and its error. If None the name will 
-                    be cal_+magname and err_cal_+magname
+                    calibrated magnitude value and its error. If calmag_col is None, 
+                    defaults to: cal_+mag_col. If the error is computed, the name of
+                    the columns containting it will be err_calmag_col
                 
-                zp_name/clrcoeff_name: `str`, `float`, or None
-                    name (or value, if scalar) of ZP and color coefficient term. 
-                    If clrcoeff_name is None, color correction will be ignored.
+                ps1_color1[2]: `array-like` or None
+                    Contain, for each source in the dataframe, the PS1Cal colors 
+                    for the respective stars.
                 
-                zp_err/clrcoeff_err: `str`, `float`
-                    name (or value, if scalar) of the error on the ZP and color coefficient.
-                    If err_mag_col is not None, they must be given!
-                
-                ps1_color1[2]: `str` or array-like
-                    If strings, these are the names of the PS1cal magnitudes used
-                    to calibrate (they should be consistent with PCOLOR).
-                    If array-like they should have the same length of the dataframe.
-                
-                dropmag: `bool`
-                    if True the df column magname will be dropped.
+                e_ps1_color1[2]: `array-like` or None
+                    Contain, for each source in the dataframe, the errors on the 
+                    PS1Cal colors for the respective stars.
         """
-        raise NotImplementedError()
         
-        
-        self.logger.info("Applying photometric calibration.")
-        
-        # see what columns are needed
-        needed_cols = [mag_col, zp_name]
-        if clrcoeff_name is None:
-            self.logger.warning("color correction will not be applied")
-        else:
-            needed_cols.extend([clrcoeff_name])
-            if type(ps1_color1) == str and type(ps1_color2) == str:
-                needed_cols.extend([ps1_color1, ps1_color2])
-        if not err_mag_col is None:
-            needed_cols.extend([zp_err, clrcoeff_err, err_mag_col])
-        
-        check_col(needed_cols, self)
-        for k in needed_cols:
-            check_col(k, self)
+        if logger is None:
+            logger = srcdf._class_logger
+        logger.info("Applying photometric calibration.")
+        if clrcoeff is None:
+            logger.warning("color correction will not be applied")
         
         # name the cal mag column and the one for the error
         if calmag_col is None:
@@ -283,49 +270,29 @@ class srcdf(pd.DataFrame):
         err_calmag_col = "err_"+calmag_col
         
         # fill them
-        if clrcoeff_name is None:
-            self[calmag_col] = self[mag_col] + self[zp_name]
-            
+        if clrcoeff is None:
+            self[calmag_col] = self[mag_col] + zp
             if not err_mag_col is None:
                 self[err_calmag_col] = np.sqrt(
                                     self[err_mag_col]**2. +
-                                    self[zp_err]**2.)
+                                    zp_err**2.)
         else:
-            ps1_color = self[ps1_color1] - self[ps1_color2]
+            ps1_color = (ps1_color1 - ps1_color2)
             self[calmag_col] = (
                 self[mag_col] + 
-                self[zp_name] +
-                self[clrcoeff_name]*ps1_color)
-            
+                zp +
+                clrcoeff*ps1_color)
             if not err_mag_col is None:
-                d_ps1_color = np.sqrt( self['e_'+ps1_color1]**2. + self['e_'+ps1_color2]**2. )
+                d_ps1_color = np.sqrt( e_ps1_color1**2. + e_ps1_color2**2. )
                 self[err_calmag_col] = np.sqrt(
                     self[err_mag_col]**2. +
-                    self[zp_err]**2. +
-                    (self[clrcoeff_err] * ps1_color)**2. + 
-                    (self[clrcoeff_name] * d_ps1_color)**2)
-        
-        # eventually get rid of the uncalibrated stuff
-        if dropmag:
-            self.logger.info("dropping non calibrated magnitude %s from dataframe"%mag_col)
-            self.drop(columns = [mag_col])
-        
-        if plot:
-            fig, ax = plt.subplots()
-            if err_mag_col is None:
-                ax.hist(self[calmag_col], bins = 100)
-                ax.set_xlabel("calibrated magnitude [mag]")
-            else:
-                ax.scatter(self[calmag_col], self[err_calmag_col])
-                ax.set_xlabel("calibrated magnitude [mag]")
-                ax.set_ylabel("error on calibrated magnitude [mag]")
-            fig.tight_layout()
-            self.save_fig(fig, '%s_calmag.png'%self.name)
-            plt.close()
+                    zp_err**2. +
+                    (clrcoeff_err * ps1_color)**2. + 
+                    (clrcoeff * d_ps1_color)**2)
 
 
     def compute_camera_coord(self, rc_x_name, rc_y_name, cam_x_name = 'cam_xpos', 
-        cam_y_name = 'cam_ypos', rotate = False, xgap_pix = 7, ygap_pix = 10, rcid_name = 'RCID', logger = None):
+        cam_y_name = 'cam_ypos', rotate = False, xgap = 7, ygap = 10, rcid_name = 'RCID', logger = None):
         """
             compute the camera-wide x/y coordinates of the sources. The x,y position
             start at the bottom-left corner of the camera (RC 14)
@@ -343,7 +310,7 @@ class srcdf(pd.DataFrame):
                 rotate: `bool`
                     if True, the individual readout channels will be rotated by 180 deg.
                 
-                x[y]gap_pix: `int`
+                x[y]gap: `int`
                     size of gap between CCDs, in pixels.
                 
                 rcid_name: `str`
@@ -373,8 +340,8 @@ class srcdf(pd.DataFrame):
         # now add the gaps between the ccds, and the rc size in pixels 
         # so that you have the x/y camera position of the lower-left corner of the RCs
         # of the readout channels
-        xll = (xrc // 2)*xgap_pix + xrc*self.xsize
-        yll = (yrc // 2)*ygap_pix + yrc*self.ysize
+        xll = (xrc // 2)*xgap + xrc*self.xsize
+        yll = (yrc // 2)*ygap + yrc*self.ysize
         
         # finally add the x/y position inside each RC
         if not rotate:
@@ -383,7 +350,7 @@ class srcdf(pd.DataFrame):
         else:
             self[cam_x_name] = xll - self[rc_x_name]
             self[cam_y_name] = yll - self[rc_y_name]
-        self.logger.info("computed camera-wide coordinates of the sources as columns: %s %s of the dataframe"%
+        logger.info("computed camera-wide coordinates of the sources as columns: %s %s of the dataframe"%
             (cam_x_name, cam_y_name))
 
 
@@ -421,86 +388,87 @@ class srcdf(pd.DataFrame):
 
         query = "(@dx < %s < (%f - @dx)) and (@dy < %s < (%d - @dy))"%(
             x_name, srcdf.xsize, y_name, srcdf.ysize)
-        self.query(expr = query, inplace = True)
+        rej_df = self.query(expr = query, inplace = True)
+        return rej_df
 
 
-    def tag_dust(self, df, dust_df_file, radius_multiply = 1., xname = 'xpos', yname = 'ypos',
+    def tag_dust(self, dust_df_file, radius_multiply = 1., xname = 'xpos', yname = 'ypos',
         dust_df_query = None, remove_dust = False, logger = None):
-            """
-                tag objects in df whose x/y position on the CCD quadrant falls on top
-                of a dust grain.
+        """
+            tag objects in df whose x/y position on the CCD quadrant falls on top
+            of a dust grain.
+            
+            Parameters:
+            -----------
                 
-                Parameters:
-                -----------
-                    
-                    dust_df_file: `str`
-                        path to a csv file containing x, y, and radius for all the dust
-                        grain found in the image. This file is created by ztfimgtoolbox.get_dust_shapes
-                    
-                    radius_mulitply: `float`
-                        factor to enlarge/shrink the dust grain radiuses.
-                    
-                    x[y]name: `str`
-                        name of this object df columns describing the x/y position of the objects.
-                    
-                    dust_df_query: `str`
-                        string to select dust grains to consider. Eg:
-                            "(dx < x < (3072 - dx)) and (dy < ypos < (3080 - dy))"
-                    
-                    remove_dust: `bool`
-                        if True, objects falling on the dust will be removed from the dataframe.
-                    
-                    logger: `logging.logger`
-                        logger instance.
+                dust_df_file: `str`
+                    path to a csv file containing x, y, and radius for all the dust
+                    grain found in the image. This file is created by ztfimgtoolbox.get_dust_shapes
                 
-                Returns:
-                --------
-                    
-                    no_dust_df, dust_df: two dataframes containing the objects not contaminated
-                    and contaminated by dust respectively.
-            """
-            
-            if logger is None:
-                logger = srcdf._class_logger
-            
-            from shapely.geometry import Point
-            from shapely import vectorized
-            
-            # read in the df file with the dust grains
-            dust_df = pd.read_csv(dust_df_file)
-            if not dust_df_query is None:
-                dust_df.query(dust_df_query, inplace = True)
-            logger.info("read position of %d dust grains from file: %s"%(len(dust_df), dust_df_file))
-            
-            # sort the dust dataframe by dust size, smaller first. This way, in case of
-            # close-by dust grains, the source is assigned to the largest one.
-            dust_df = dust_df.sort_values('r')
-            
-            # loop on the dust grains and match them to the sources
-            logger.info("matching sources %d objects with %d dust grains.."%(len(df), len(dust_df)))
-            for _, d in dust_df.iterrows():
+                radius_mulitply: `float`
+                    factor to enlarge/shrink the dust grain radiuses.
                 
-                # create the geometrical object for this dust grain
-                dust_g = Point(d['x'], d['y']).buffer( (radius_multiply * d['r']) )
+                x[y]name: `str`
+                    name of this object df columns describing the x/y position of the objects.
                 
-                # find out all the sources that matches this dust grain
-                flagin = vectorized.contains(dust_g, self[xname], self[yname])
-                logger.debug("found %d sources inside a dust grain of radius: %.2f"%(sum(flagin), d['r']))
+                dust_df_query: `str`
+                    string to select dust grains to consider. Eg:
+                        "(dx < x < (3072 - dx)) and (dy < ypos < (3080 - dy))"
                 
-                # add the dust property to the dataframe
-                self.loc[flagin, 'dust_x'] = d['x']
-                self.loc[flagin, 'dust_y'] = d['y']
-                self.loc[flagin, 'dust_r'] = d['r']
+                remove_dust: `bool`
+                    if True, objects falling on the dust will be removed from the dataframe.
+                
+                logger: `logging.logger`
+                    logger instance.
             
-            dust_matches = self.count()['dust_r']
-            logger.info("found %d sources on top of dust grains."%(dust_matches))
+            Returns:
+            --------
+                
+                no_dust_df, dust_df: two dataframes containing the objects not contaminated
+                and contaminated by dust respectively.
+        """
             
-            # split the dataframe into dust and non-dust, eventually remove 
-            # the dust from the source dataframe
-            dusty = srcdf(self.dropna(axis=0, subset = ['dust_r']))
-            clean = srcdf(self[self['dust_r'].isna()])
-            if remove_dust:
-                self = clean
-                logger.info("removing sources affected by dust. %d retained."%(len(self)))
-            return clean, dusty
+        if logger is None:
+            logger = srcdf._class_logger
+        
+        from shapely.geometry import Point
+        from shapely import vectorized
+        
+        # read in the df file with the dust grains
+        dust_df = pd.read_csv(dust_df_file)
+        if not dust_df_query is None:
+            dust_df.query(dust_df_query, inplace = True)
+        logger.info("read position of %d dust grains from file: %s"%(len(dust_df), dust_df_file))
+        
+        # sort the dust dataframe by dust size, smaller first. This way, in case of
+        # close-by dust grains, the source is assigned to the largest one.
+        dust_df = dust_df.sort_values('r')
+        
+        # loop on the dust grains and match them to the sources
+        logger.info("matching sources %d objects with %d dust grains.."%(len(df), len(dust_df)))
+        for _, d in dust_df.iterrows():
+            
+            # create the geometrical object for this dust grain
+            dust_g = Point(d['x'], d['y']).buffer( (radius_multiply * d['r']) )
+            
+            # find out all the sources that matches this dust grain
+            flagin = vectorized.contains(dust_g, self[xname], self[yname])
+            logger.debug("found %d sources inside a dust grain of radius: %.2f"%(sum(flagin), d['r']))
+            
+            # add the dust property to the dataframe
+            self.loc[flagin, 'dust_x'] = d['x']
+            self.loc[flagin, 'dust_y'] = d['y']
+            self.loc[flagin, 'dust_r'] = d['r']
+        
+        dust_matches = self.count()['dust_r']
+        logger.info("found %d sources on top of dust grains."%(dust_matches))
+        
+        # split the dataframe into dust and non-dust, eventually remove 
+        # the dust from the source dataframe
+        dusty = srcdf(self.dropna(axis=0, subset = ['dust_r']))
+        clean = srcdf(self[self['dust_r'].isna()])
+        if remove_dust:
+            self = clean
+            logger.info("removing sources affected by dust. %d retained."%(len(self)))
+        return clean, dusty
 

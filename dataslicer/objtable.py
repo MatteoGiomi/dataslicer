@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
 
 #import dataslicer.df_utils as df_utils
+from dataslicer.srcdf import srcdf
 from dataslicer.df_utils import fits_to_df, check_col
 from dataslicer.dataset_base import dataset_base, select_kwargs
 
@@ -38,6 +39,7 @@ class objtable(dataset_base, _objtable_methods):
 
     def read_csv(self, **args):
         self._read_csv(tag = 'objtable', **args)
+        self.df = srcdf(self.df)
 
     def _check_for_gdf(self):
         if not hasattr(self, 'gdf'):
@@ -105,7 +107,7 @@ class objtable(dataset_base, _objtable_methods):
                         buff['OBSID'].astype(str) +
                         buff['sourceid'].astype(str)).astype(int)
                 frames.append(buff)
-        self.df = pd.concat(frames)
+        self.df = srcdf(pd.concat(frames))
         end = time.time()
         self.logger.info("loaded %d files into a %d rows dataframe. Took %.2e sec"%
             (len(files), len(self.df), (end-start)))
@@ -222,10 +224,11 @@ class objtable(dataset_base, _objtable_methods):
                     name of the columns containing the error on mag_col. If None, 
                     error on the calibrated magnitudes will not be computed. 
                 
-                calmag_col/err_mag_col: `str` or None
+                calmag_col: `str` or None
                     name of the column in the dataframe which will host the
-                    calibrated magnitude value and its error. If None the name will 
-                    be cal_+magname and err_cal_+magname
+                    calibrated magnitude value and its error. If calmag_col is None, 
+                    defaults to: cal_+mag_col. If the error is computed, the name of
+                    the columns containting it will be err_calmag_col
                 
                 zp_name/clrcoeff_name: `str` or None
                     name of ZP and color coefficient term. If clrcoeff_name is None, 
@@ -259,38 +262,38 @@ class objtable(dataset_base, _objtable_methods):
                 needed_cols.extend([ps1_color1, ps1_color2])
         if not err_mag_col is None:
             needed_cols.extend([zp_err, clrcoeff_err, err_mag_col])
-        
         check_col(needed_cols, self.df)
-        for k in needed_cols:
-            check_col(k, self.df)
         
         # name the cal mag column and the one for the error
         if calmag_col is None:
             calmag_col = "cal_"+mag_col
         err_calmag_col = "err_"+calmag_col
         
-        # fill them
-        if clrcoeff_name is None:
-            self.df[calmag_col] = self.df[mag_col] + self.df[zp_name]
-            
-            if not err_mag_col is None:
-                self.df[err_calmag_col] = np.sqrt(
-                                    self.df[err_mag_col]**2. +
-                                    self.df[zp_err]**2.)
-        else:
-            ps1_color = self.df[ps1_color1] - self.df[ps1_color2]
-            self.df[calmag_col] = (
-                self.df[mag_col] + 
-                self.df[zp_name] +
-                self.df[clrcoeff_name]*ps1_color)
-            
-            if not err_mag_col is None:
-                d_ps1_color = np.sqrt( self.df['e_'+ps1_color1]**2. + self.df['e_'+ps1_color2]**2. )
-                self.df[err_calmag_col] = np.sqrt(
-                    self.df[err_mag_col]**2. +
-                    self.df[zp_err]**2. +
-                    (self.df[clrcoeff_err] * ps1_color)**2. + 
-                    (self.df[clrcoeff_name] * d_ps1_color)**2)
+        # now pass the arrays to the srcdf method. Enable all the 'None' opions.
+        if not zp_err is None:
+            zp_err = self.df[zp_err]
+        if not clrcoeff_name is None:
+            clrcoeff = self.df[clrcoeff_name]
+        if not clrcoeff_err is None:
+            clrcoeff_err = self.df[clrcoeff_err]
+        if not ps1_color1 is None:
+            e_ps1_color1 = self.df['e_'+ps1_color1]
+            ps1_color1 = self.df[ps1_color1]
+        if not ps1_color2 is None:
+            e_ps1_color2 = self.df['e_'+ps1_color2]
+            ps1_color2 = self.df[ps1_color2]
+        self.df.calmag(mag_col = mag_col,           # these are the names
+                       err_mag_col = err_mag_col,
+                       calmag_col = calmag_col,
+                       zp = self.df[zp_name],       # now the arrays
+                       zp_err = zp_err,
+                       clrcoeff = clrcoeff,
+                       clrcoeff_err = clrcoeff_err, 
+                       ps1_color1 = ps1_color1,
+                       ps1_color2 = ps1_color2,
+                       e_ps1_color1 = e_ps1_color1, 
+                       e_ps1_color2 = e_ps1_color2, 
+                       logger = self.logger)
         
         # eventually get rid of the uncalibrated stuff
         if dropmag:
@@ -313,10 +316,11 @@ class objtable(dataset_base, _objtable_methods):
 
 
     def compute_camera_coord(self, rc_x_name, rc_y_name, cam_x_name = 'cam_xpos', 
-        cam_y_name = 'cam_ypos', xgap_pix = 7, ygap_pix = 10, rcid_name = 'RCID'):
+        cam_y_name = 'cam_ypos', rotate = False, xgap_pix = 7, ygap_pix = 10, rcid_name = 'RCID'):
         """
             compute the camera-wide x/y coordinates of the sources. The x,y position
-            start at the bottom-left corner of the camera (RC 14)
+            start at the bottom-left corner of the camera (RC 14). The arguments 
+            are passed to the srcdf memner of this class.
             
             Parameters:
             -----------
@@ -328,43 +332,21 @@ class objtable(dataset_base, _objtable_methods):
                 cam_x[y]_name: `str`
                     name of the columns that will contain the camera-wide coordinates.
                 
+                rotate: `bool`
+                    if True, the individual readout channels will be rotated by 180 deg.
+                
                 x[y]gap_pix: `int`
                     size of gap between CCDs, in pixels.
                 
                 rcid_name: `str`
                     name of column containing the ID of the readout-channels (0 to 63).
         """
-        
-        # dimension of a RC in pixels
-        xsize, ysize = 3072, 3080
-        
-        # checks
-        check_col([rc_x_name, rc_y_name, rcid_name], self.df)
-        
-        # compute ccd and quadrant (1 to 4) from RC
-        ccd = (self.df[rcid_name]//4 + 1).rename('ccd')
-        q = (self.df[rcid_name]%4 + 1).rename('q')
-
-        # arrange the rc in rows and cols based on ccd and q.
-        # NOTE: the returned values are zero-indexed (from 0 to 7) and 
-        # start from the bottom-left corner of the image, so that RC 14 is
-        # at position (0, 0) and RC 48 at (7, 7).
-        yrc= 2*((ccd-1)//4) + 1*np.logical_or(q==1, q==2)
-        xrc= 2*( 4-(ccd-1)%4)-1 - 1*np.logical_or(q==2, q==3)
-        
-        # now add the gaps between the ccds, and the rc size in pixels 
-        # so that you have the x/y camera position of the lower-left corner of the RCs
-        # of the readout channels
-        xll = (xrc // 2)*xgap_pix + xrc*xsize
-        yll = (yrc // 2)*ygap_pix + yrc*ysize
-        
-        # finally add the x/y position inside each RC
-        self.df[cam_x_name] = xll + self.df[rc_x_name]
-        self.df[cam_y_name] = yll + self.df[rc_y_name]
-        self.logger.info("computed camera-wide coordinates of the sources as columns: %s %s of the dataframe"%
-            (cam_x_name, cam_y_name))
-        
-        # TODO: rotation?
+        # do it
+        self.df.compute_camera_coord(
+            rc_x_name = rc_x_name, rc_y_name = rc_y_name,
+            cam_x_name = cam_x_name, cam_y_name = cam_y_name, 
+            rotate = rotate, xgap = xgap, ygap = ygap, 
+            rcid_name = rcid_name, logger = self.logger)
         
         # update grouped df
         self.update_gdf()
@@ -391,28 +373,15 @@ class objtable(dataset_base, _objtable_methods):
                 
                 pandas.DataFrame with the rejected sources.
         """
-        check_col([x_name, y_name], self.df)
-        
-        if type(exclude_dist) == float:
-            dx = trim_dist
-            dy = dist_x
-        elif len(exclude_dist) == 2:
-            dx = trim_dist[0]
-            dy = trim_dist[1]
-        else:
-            raise ValueError("parameter exclude_dist must be float or [dist_x, dist_y].")
-        
-        xsize, ysize = 3072, 3080
-        query = "(@dx < @x_name < (@xsize - @dx)) and (@dy < @y_name < (@ysize - @dy))"
-        rej_df = self.query_df(exp = query, inplace = True)
-        
+        rej_df = self.df.trim_edges(x_name = x_name, y_name = y_name, trim_dist = trim_dist)
         self.update_gdf()
         return rej_df
 
 
-    def tag_dust(dust_df_file, radius_multiply = 1., xname = 'xpos', yname = 'ypos', remove_dust = False):
+    def tag_dust(self, dust_df_file, radius_multiply = 1., xname = 'xpos', yname = 'ypos',
+        dust_df_query = None, remove_dust = False, logger = None):
         """
-            tag objects whose x/y position on the CCD quadrant falls on top
+            tag objects in df whose x/y position on the CCD quadrant falls on top
             of a dust grain.
             
             Parameters:
@@ -428,21 +397,28 @@ class objtable(dataset_base, _objtable_methods):
                 x[y]name: `str`
                     name of this object df columns describing the x/y position of the objects.
                 
+                dust_df_query: `str` or None
+                    string to select dust grains to consider. Eg:
+                        "(dx < x < (3072 - dx)) and (dy < ypos < (3080 - dy))"
+                    if None, no cut will be applied.
+                
                 remove_dust: `bool`
                     if True, objects falling on the dust will be removed from the dataframe.
+                
+                logger: `logging.logger`
+                    logger instance.
             
             Returns:
             --------
                 
-                pandas.DataFrame containing the objects contaminated by dust.
-        """
+                no_dust_df, dust_df: two dataframes containing the objects not contaminated
+                and contaminated by dust respectively.
+            """
+        clean, dusty = self.df.tag_dust(
+                                dust_df_file = dust_df_file,
+                                radius_multiply = radius_multiply, 
+                                xname = xname, yname = yname,
+                                dust_df_query = dust_df_query, 
+                                remove_dust = remove_dust, logger = self.logger)
+        return clean, dusty
         
-        raise NotImplementedError("To be re-written using srcdf")
-        
-        # read in the df file and create the geometrical objects
-#        dust_df = pd.read_csv(dust_df_file)
-#        centers = dust_df[['x', 'y']].as_matrix()
-#        radiuses = radius_mulitply * dust_df['r']
-#        print (centers[:5])
-#        print (radiuses[:5])
-#        print (dust_df['r'][:5])
