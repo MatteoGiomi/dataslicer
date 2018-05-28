@@ -12,6 +12,7 @@ import time, tqdm
 import pandas as pd
 import numpy as np
 import logging
+from scipy.odr import ODR, Model, Data, RealData
 logging.basicConfig(level = logging.INFO)
 
 from dataslicer.df_utils import match_to_PS1cal, fits_to_df, check_col
@@ -184,31 +185,123 @@ class srcdf(pd.DataFrame):
             self.dropna(subset = ['dist2ps1'], inplace = True)
             logger.info("dropping sources without match in PS1cal DB: %d retained."%
                 (len(self)))
+        return self
 
-    def photometric_solution(self):
+    def photometric_solution(self, ztf_filter = 'g', mag_col = 'mag', mag_err_col = 'sigmag',
+        gmag_col = 'gmag', rmag_col = 'rmag', imag_col = 'imag',
+        gmag_err_col = 'e_gmag', rmag_err_col = 'e_rmag', imag_err_col = 'e_imag',
+        logger = None, return_values = True, append_columns = True):
         """
-            this is up to you Simeon! Here you implement your ZP and clr coeff fit.
+            Fit for zero-point and color-coefficient using Orthogonal Distance Regression
+
+            The Model used is Mcal = Minst + ZP + c_f*(M1_PS1 - M2_PS1) 
+
+            The parameters fitted are ZP (the zero-point) and c_f (the color-coefficient)
+
+            Depending on which ZTF-Filter is used the M1_PS1 and M2_PS1 are different:
+            for g: g_PS1 - r_PS1
+            for r: g_PS1 - r_PS1
+            for i: r_PS1 - i_PS1
+
+            Parameters:
+            -----------
             
-            I've implemented the match_to_PS1 cal method, so you should have everything you need. 
-            
-            Keep in mind that depending on the filter ZTF is using, the PS1 colors can change, 
-            in the ztf_pipeline_deliverables.pdf (pg 29) it is written:
-            
-            gPS1 − g = ZPg + cg (gPS1 − rPS1)
-            rPS1 − r = ZPr + cr (gPS1 − rPS1)
-            iPS1 −i = ZPi + ci(rPS1 −iPS1) 
-            
-            Remember to pass through all the parameters you need, and set reasonable defauls..
-            
-            You are free to decide weather this function should return the ZP and CLRCOEFF (and 
-            errors), or add them to the dataframe as new columns, or both (depending on user choice).
-            
-            Enjoy, and feel free to ask as many questions as you want!
-            
-            matte
+                ztf_filter: `str`
+                    name of the ZTF-filter that was used for the fits 
+                    (calibration changes depending on filter)
+                    Accepted values: 'g', 'r' or 'i'
+
+                mag_col: 'str'
+                    name of the column of the instrumental magnitude in the dataframe
+
+                mag_err_col: 'str'
+                    name of the column of the instrumental magnitude error in the dataframe
+
+                gmag_col: 'str'
+                    name of the column of PS1-magnitude in g band --> LIKEWISE FOR error as well as r and i band
+
+                return_values: 'bool'
+                    if True, the zero-point and color-coefficient 
+                    (and the errors) will be returned by the method as two arrays
+
+                append_columns: 'bool'
+                    if True, the zero-point and color-coefficient 
+                    (and the errors) will be appended as columns to the dataframe
+                
         """
-        
-        pass
+
+        if logger is None:
+            logger = srcdf._class_logger
+        logger.info("Fitting (Orthogonal Distance Regression) for zero-point and color-coefficient using PS1 calibrators")
+
+        # exclude 0 values of uncertainty to avoid divide-by-zero-error in fitting
+        if ztf_filter == 'g':
+            df = self.query(gmag_err_col + ' != 0')
+        if ztf_filter == 'r':
+            df = self.query(rmag_err_col + ' != 0')
+        if ztf_filter == 'i':
+            df = self.query(imag_err_col + ' != 0')
+
+        gmag = np.array(df[gmag_col])
+        gmag_err = np.array(df[gmag_err_col])
+
+        rmag = np.array(df[rmag_col])
+        rmag_err = np.array(df[rmag_err_col]) 
+
+        imag = np.array(df[imag_col])
+        imag_err = np.array(df[imag_err_col]) 
+
+        inst_mag = np.array(df[mag_col])
+        inst_mag_err = np.array(df[mag_err_col])
+
+        if ztf_filter == 'g':
+            logger.info("Ftting zero-point and color-coefficient for g-filter")
+            mag_delta = gmag - rmag
+            mag_delta_err = np.sqrt(gmag_err**2 + rmag_err**2)
+
+        elif ztf_filter == 'r':
+            logger.info("Fitting zero-point and color-coefficient for r-filter")
+            mag_delta = gmag - rmag
+            mag_delta_err = np.sqrt(gmag_err**2 + rmag_err**2)
+
+        elif ztf_filter == 'i':
+            logger.info("Fitting zero-point and color-coefficient for i-filter")
+            mag_delta = rmag - imag
+            mag_delta_err = np.sqrt(rmag_err**2 + imag_err**2)
+
+         # create matrix from instrumental magnitude and PS1 magnitude delta (M1_PS1 - M2_PS2) for fit-methods
+        xvalues = np.vstack([inst_mag, mag_delta])
+        xvalues_err = np.vstack([inst_mag_err, mag_delta_err])
+
+        def func(B, x):
+            return B[0] + x[0] + (B[1]*x[1])
+
+        # data is the measured magnitudes and their error, the model is the function
+        if ztf_filter == 'g':
+            data = RealData(x = xvalues, y = gmag, sx = xvalues_err, sy = gmag_err)
+        elif ztf_filter == 'r':
+            data = RealData(x = xvalues, y = rmag, sx = xvalues_err, sy = rmag_err)
+        elif ztf_filter == 'i':
+            data = RealData(x = xvalues, y = imag, sx = xvalues_err, sy = imag_err)
+        model = Model(func)
+
+        # do the actual fit (beta0 are starting points for the regression)
+        odr_fit = ODR(data, model, beta0 = [20,-0.01])
+        output = odr_fit.run()
+
+        if append_columns:
+            zp_col = "fit_zp_" + ztf_filter
+            zp_err_col = "err_" + "fit_zp_" + ztf_filter
+            clrcoeff_col = "fit_clrcoeff_" + ztf_filter
+            clrcoeff_err_col = "err_" + "fit_clrcoeff_" + ztf_filter
+            self[zp_col] = output.beta[0]
+            self[zp_err_col] = output.sd_beta[0]
+            self[clrcoeff_col] = output.beta[1]
+            self[clrcoeff_err_col] = output.sd_beta[1]
+
+        if return_values:
+            return output.beta, output.sd_beta
+
 
     def calmag(self, mag_col, zp, zp_err = None, err_mag_col = None, calmag_col = None, 
         clrcoeff = None, clrcoeff_err = None, ps1_color1 = None, ps1_color2 = None, 
