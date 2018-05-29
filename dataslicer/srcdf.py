@@ -289,16 +289,18 @@ class srcdf(pd.DataFrame):
         odr_fit = ODR(data, model, beta0 = [20,-0.01])
         output = odr_fit.run()
 
+        # append the fitted parameters and their sigmas (!) as columns
         if append_columns:
             zp_col = "fit_zp_" + ztf_filter
-            zp_err_col = "err_" + "fit_zp_" + ztf_filter
+            zp_sig_col = "sig_" + "fit_zp_" + ztf_filter
             clrcoeff_col = "fit_clrcoeff_" + ztf_filter
-            clrcoeff_err_col = "err_" + "fit_clrcoeff_" + ztf_filter
+            clrcoeff_sig_col = "sig_" + "fit_clrcoeff_" + ztf_filter
             self[zp_col] = output.beta[0]
-            self[zp_err_col] = output.sd_beta[0]
+            self[zp_sig_col] = output.sd_beta[0]
             self[clrcoeff_col] = output.beta[1]
-            self[clrcoeff_err_col] = output.sd_beta[1]
+            self[clrcoeff_sig_col] = output.sd_beta[1]
 
+        # return the fitted parameters and their sigmas (!)
         if return_values:
             return output.beta, output.sd_beta
 
