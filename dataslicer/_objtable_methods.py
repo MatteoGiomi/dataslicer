@@ -22,7 +22,7 @@ class _objtable_methods():
     # ------------------------------------------------------------- #
     
     def match_to_PS1cal(self, rs_arcsec, use_clusters, xname, yname,
-            clean_non_matches = True, plot = True, **match_to_PS1_kwargs): 
+            clean_non_matches = True, plot = True, match_src_by_src = False, **match_to_PS1_kwargs): 
             """
                 Match the sources in the objtable to the PS1 calibrator stars. To each
                 row in the dataframe the catalog entry of the found PS1 cp is added.
@@ -60,6 +60,9 @@ class _objtable_methods():
                             *dbclient: `pymongo.MongoClient`
                                 pymongo client that manages the PS1 calibrators databae.
                                 This is passed to extcats CatalogQuery object. Default is None
+
+                    match_src_by_src: 'bool'
+                        Overrides this method's ability to match according to fields if true
                     
                     plot: `bool`
                         if True, a disganostic plot showing the distribution of the 
@@ -106,8 +109,7 @@ class _objtable_methods():
             else:
                 # if you have the field & RC id for every object, use them if possible.
                 dfcols = self.df.columns.tolist()
-                match_src_by_src = False
-                if 'FIELDID' in dfcols and 'RCID' in dfcols:
+                if 'FIELDID' in dfcols and 'RCID' in dfcols and match_src_by_src is False:
                     
                     fields = self.df.FIELDID.unique().astype(int).tolist()
                     rcids = self.df.RCID.unique().astype(int).tolist()
@@ -145,11 +147,11 @@ class _objtable_methods():
                     self.df = self.df.merge(
                         ps1cp_df, on = 'srcID', how='left',  suffixes=['', '_ps1'])
                     
-                    # if requested, drop sources without PS1cp
-                    if clean_non_matches:
-                        self.df.dropna(subset = ['dist2ps1'], inplace = True)
-                        self.logger.info("dropping sources without match in PS1cal DB: %d retained."%
-                            (len(self.df)))
+                # if requested, drop sources without PS1cp
+                if clean_non_matches:
+                    self.df.dropna(subset = ['dist2ps1'], inplace = True)
+                    self.logger.info("dropping sources without match in PS1cal DB: %d retained."%
+                        (len(self.df)))
             if plot:
                 # create diagnostic plot
                 fig, ax = plt.subplots()
