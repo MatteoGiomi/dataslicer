@@ -11,7 +11,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from extcats import CatalogQuery
-from dataslicer.df_utils import check_col, match_to_PS1cal, match_to_PS1cal_fields
+from dataslicer.df_utils import check_col
+from dataslicer.PS1Cal_matching import match_to_PS1cal, match_to_PS1cal_fields
 
 class _objtable_methods():
     
@@ -22,7 +23,8 @@ class _objtable_methods():
     # ------------------------------------------------------------- #
     
     def match_to_PS1cal(self, rs_arcsec, use_clusters, xname, yname,
-            clean_non_matches = True, plot = True, match_src_by_src = False, **match_to_PS1_kwargs): 
+            clean_non_matches = True, plot = True, match_with_fields = False, 
+            match_src_by_src = False, **match_to_PS1_kwargs): 
             """
                 Match the sources in the objtable to the PS1 calibrator stars. To each
                 row in the dataframe the catalog entry of the found PS1 cp is added.
@@ -60,10 +62,13 @@ class _objtable_methods():
                             *dbclient: `pymongo.MongoClient`
                                 pymongo client that manages the PS1 calibrators databae.
                                 This is passed to extcats CatalogQuery object. Default is None
-
-                    match_src_by_src: 'bool'
-                        Overrides this method's ability to match according to fields if true
                     
+                    match_with_fields: `bool`
+                        use fieldId and rcId to match sources with the PS1Cal database.
+                    
+                    match_src_by_src: `bool`
+                        match one source at the time.
+                        
                     plot: `bool`
                         if True, a disganostic plot showing the distribution of the 
                         PS1cal - cluster distance will be created and saved.
@@ -106,35 +111,15 @@ class _objtable_methods():
                 self.logger.info("updating cluster dataframe.")
                 self.gdf = self.df.groupby('clusterID', sort = False)
                 
-            else:
-                # if you have the field & RC id for every object, use them if possible.
-                dfcols = self.df.columns.tolist()
-                if 'FIELDID' in dfcols and 'RCID' in dfcols and match_src_by_src is False:
-                    
-                    fields = self.df.FIELDID.unique().astype(int).tolist()
-                    rcids = self.df.RCID.unique().astype(int).tolist()
-                    self.logger.info("found objtable sources for %d fields and %d RCs."%
-                        (len(fields), len(rcids)))
-                    
-                    # get the ones you have in the catalog:
-                    ps1cal_fields = ps1cal_query.src_coll.distinct('field')
-                    self.logger.info("PS1 calibrator database is indexed in %d fields"%
-                        (len(ps1cal_fields)))
-                    
-                    # see if the fields in the objtable are also in the database
-                    if all([ff in ps1cal_fields for ff in fields]):
-                        self.logger.info(
-                            "Matching to PS1 cal using FIELDID and RC information")
-                        match_to_PS1cal_fields()
-                        
-                    else:
-                        self.logger.warning("cannot find objtable fields in PS1 cal.")
-                        match_src_by_src = True
+            elif match_with_fields:
+                self.logger.info("Matching to PS1 cal using FIELDID and RC information")
+                matched_df = match_to_PS1cal_fields(self.df, rs_arcsec, logger=self.logger)
+                if not matched_df is None:
+                    self.df = matched_df
                 else:
-                    self.logger.info("FIELDID and/or RCID missing from objtable dataframe.")
                     match_src_by_src = True
                 
-                if match_src_by_src:
+            elif match_src_by_src:
                     self.logger.info("Matching each of the %d sources to the PS1 cal database."%(len(self.df)))
                     
                     # do the matching
@@ -146,14 +131,18 @@ class _objtable_methods():
                     # merge the dataframe
                     self.df = self.df.merge(
                         ps1cp_df, on = 'srcID', how='left',  suffixes=['', '_ps1'])
-                    
-                # if requested, drop sources without PS1cp
-                if clean_non_matches:
-                    self.df.dropna(subset = ['dist2ps1'], inplace = True)
-                    self.logger.info("dropping sources without match in PS1cal DB: %d retained."%
-                        (len(self.df)))
+            else:
+                raise RuntimeError("Either use_cluster or match_src_by_src or match_with_fields has to be asserted.")
+            
+            # if requested, drop sources without PS1cp
+            if clean_non_matches:
+                self.df.dropna(subset = ['dist2ps1'], inplace = True)
+                self.logger.info("dropping sources without match in PS1cal DB: %d retained."%
+                    (len(self.df)))
+            
+            # create diagnostic plot
             if plot:
-                # create diagnostic plot
+                
                 fig, ax = plt.subplots()
                 if hasattr(self, 'gdf'):
                     h = ax.hist(self.gdf['dist2ps1'].max(), bins = 50, log = True)
@@ -166,7 +155,7 @@ class _objtable_methods():
                 plt.close()
         
         
-    def ps1based_outlier_rm_iqr(self, cal_mag_name, ps1mag_name, norm_mag_diff_cut, n_mag_bins=10, plot = True):
+    def ps1based_outlier_rm_iqr(self, cal_mag_name, ps1mag_name, norm_mag_diff_cut, n_mag_bins=10, plot=True):
         """
             remove clusters based on the normalized difference between the cluster average
             magnitude and that of the associated PS1 calibrator star. The algorithm

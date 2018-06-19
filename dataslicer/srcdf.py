@@ -16,7 +16,8 @@ import logging
 from scipy.odr import ODR, Model, Data, RealData
 logging.basicConfig(level = logging.INFO)
 
-from dataslicer.df_utils import match_to_PS1cal, fits_to_df, check_col
+from dataslicer.df_utils import fits_to_df, check_col
+from dataslicer.PS1Cal_matching import match_to_PS1cal
 
 class srcdf(pd.DataFrame):
     """

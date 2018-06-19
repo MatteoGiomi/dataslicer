@@ -48,7 +48,7 @@ class dataset(dataset_base):
         
         # init parent class
         dataset_base.__init__(self, name, datadir, fext, logger = self.logger)
-        self.logger.info("found %d .%s files in directory: %s"%(len(self.files), self.fext, self.datadir))
+        self.logger.info("found %d %s files in directory: %s"%(len(self.files), self.fext, self.datadir))
 
 
     def load_metadata(self, metadata_file = None, force_reload = False, meta_tocsv = True, **args):
