@@ -72,13 +72,22 @@ class metadata(dataset_base):
         # loop on files and fill in the dataframe with header keywords
         rows = []
         for fitsfile in tqdm.tqdm(self.files):
-            head, row = fits.getheader(fitsfile, **getheader_args), {}
-            for key, val in head.items():
-                if key in header_keys or any([mk in key for mk in magic_keys]):
-                    self.logger.debug("found key %s in desired header keys."%key)
-                    row[key] = val
-            row['PATH'] = fitsfile
-            rows.append(row)
+            try:
+                head, row = fits.getheader(fitsfile, **getheader_args), {}
+                for key, val in head.items():
+                    if key in header_keys or any([mk in key for mk in magic_keys]):
+                        self.logger.debug("found key %s in desired header keys."%key)
+                        row[key] = val
+                row['PATH'] = fitsfile
+                rows.append(row)
+            except OSError:
+                self.logger.warning("skipping corrupted file %s"%fitsfile)
+#            for key, val in head.items():
+#                if key in header_keys or any([mk in key for mk in magic_keys]):
+#                    self.logger.debug("found key %s in desired header keys."%key)
+#                    row[key] = val
+#            row['PATH'] = fitsfile
+#            rows.append(row)
         self.df = pd.DataFrame.from_records(rows)
 
         # check that you have all the keys you asked for
