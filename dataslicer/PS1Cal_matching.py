@@ -80,7 +80,6 @@ def match_to_PS1cal_fields(df, rs_arcsec, ra_key='ra', dec_key='dec', fieldid_co
     # -------------------------------------------- #
 
     # get the calibrators for those fields and RCs
-    logger.info("querying PS1Cal database for all sources in your fields and RCs.")
     query = {'field': { "$in": my_fields}, 'rcid': {'$in': my_rcs}}
     proj = None #{ 'ra': 1, 'dec': 1 }
     ps1df = pd.DataFrame(
@@ -97,15 +96,17 @@ def match_to_PS1cal_fields(df, rs_arcsec, ra_key='ra', dec_key='dec', fieldid_co
     logger.info("done. Took %.2e seconds."%(time.time()-start))
     
     # add ID and distance of closest PS1 cp to source dataframe
+    start = time.time()
+    logger.info("appending PS1 info to source dataframe.")
     df['_id'] = [ps1df._id[ps1id] for ps1id in closest_ps1_ids]
     df['dist2ps1'] = d2ps1.arcsec
     
     # merge the dataframes
     df = df.merge(ps1df, on = '_id', how='left',  suffixes=['', '_ps1'])
     
-    # falg sources with PS1 matches too far away
+    # flag sources with PS1 matches too far away
     df.loc[df['dist2ps1']>rs_arcsec, 'dist2ps1'] = np.nan
-    print (df[['ra', 'dec', 'ra_ps1', 'dec_ps1', 'dist2ps1']])
+    logger.info("done. Took %.2e seconds."%(time.time()-start))
     
     # remove uselsess columns and return
     if not col2rm is None:
