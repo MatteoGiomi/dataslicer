@@ -8,16 +8,19 @@
 import time
 import pandas as pd
 import numpy as np
+import logging
 from astropy.coordinates import SkyCoord 
 from dataslicer.df_utils import check_col, downcast_df
+logging.basicConfig(level = logging.INFO)
 
 def init_catalog_query():
     from extcats import CatalogQuery
     return CatalogQuery.CatalogQuery(
             'ps1cal', 'ra', 'dec', dbclient = None, logger = None)
 
-def match_to_PS1cal_fields(df, rs_arcsec, clean_non_matches, ra_key='ra', dec_key='dec', fieldid_col='FIELDID',
-    rcid_col='RCID', col2rm = ['rcid', 'field', '_id', 'hpxid_16'], ps1cal_query = None, logger = None):
+def match_to_PS1cal_fields(df, rs_arcsec, ra_key='ra', dec_key='dec', fieldid_col='FIELDID',
+    rcid_col='RCID', col2rm = ['rcid', 'field', '_id', 'hpxid_16'], ps1cal_query = None, 
+    clean_non_matches = True, logger = None):
     """
         match sources in the dataframe to those in the PS1Cal database 
         using field and RC Ids to speed up the process.
@@ -42,6 +45,9 @@ def match_to_PS1cal_fields(df, rs_arcsec, clean_non_matches, ra_key='ra', dec_ke
             
             ps1cal_query: `extcats.CatalogQuery`
                 object that will take care of doing the PS1 matching.
+
+            clean_non_matches: `bool`
+                if True, sources with no match in the PS1cal db are removed.
             
             logger: `logging.logger`
                 instance of logger to use.
@@ -52,6 +58,9 @@ def match_to_PS1cal_fields(df, rs_arcsec, clean_non_matches, ra_key='ra', dec_ke
             df with the matches or None.
     """
     
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
     check_col([fieldid_col, rcid_col, ra_key, dec_key], df)
     
     # then check that all the fields in this object df
@@ -114,6 +123,12 @@ def match_to_PS1cal_fields(df, rs_arcsec, clean_non_matches, ra_key='ra', dec_ke
     # remove uselsess columns and return
     if not col2rm is None:
         df.drop(columns=col2rm, inplace=True)
+
+    # remove non
+    if clean_non_matches:
+        df.dropna(subset = ['dist2ps1'], inplace = True)
+        logger.info("dropping sources without match in PS1cal DB: %d retained."%(len(df)))
+    
     return df
 
 
