@@ -22,9 +22,8 @@ class _objtable_methods():
     #                                                               #
     # ------------------------------------------------------------- #
     
-    def match_to_PS1cal(self, rs_arcsec, use_clusters, xname, yname,
-            clean_non_matches = True, plot = True, match_with_fields = False, 
-            match_src_by_src = False, **match_to_PS1_kwargs): 
+    def match_to_PS1cal(self, rs_arcsec, use, xname, yname,
+            clean_non_matches = True, plot = True, **match_to_PS1_kwargs): 
             """
                 Match the sources in the objtable to the PS1 calibrator stars. To each
                 row in the dataframe the catalog entry of the found PS1 cp is added.
@@ -38,14 +37,6 @@ class _objtable_methods():
                     rs_arcsec: `float`
                         search radius, in arcseconds for matching with the PS1 calibrators.
                     
-                    use_clusters: `bool`
-                        if True, match each of this object clusters to the calibrators, rather
-                        than individual sources. In this case, the cluster centroid position is 
-                        used. 
-                        If False, the matching will try to use FIELDID and RCID to speed up the query.
-                        If this information is not included in this object dataframe, or if the 
-                        fields are not the 'standard' ones, the matching will be done source by source.
-                     
                     clean_non_matches: `bool`
                         if True, sources with no match in the PS1cal db are removed.
                      
@@ -63,12 +54,18 @@ class _objtable_methods():
                                 pymongo client that manages the PS1 calibrators databae.
                                 This is passed to extcats CatalogQuery object. Default is None
                     
-                    match_with_fields: `bool`
-                        use fieldId and rcId to match sources with the PS1Cal database.
+                    use: `str`
+                        how the matching is done. Allowed values are:
+                            * clusters:
+                                match each of this object clusters to the calibrators, rather
+                                than individual sources. In this case, the cluster centroid position is 
+                                used. 
+                            * fieldid:
+                                the matching will use FIELDID and RCID to pre-select PS1 sources
+                                and then match the two coordinate lists.
+                            * srcs:
+                                Do the matching source bey source. This is the fallback option.
                     
-                    match_src_by_src: `bool`
-                        match one source at the time.
-                        
                     plot: `bool`
                         if True, a disganostic plot showing the distribution of the 
                         PS1cal - cluster distance will be created and saved.
@@ -87,7 +84,7 @@ class _objtable_methods():
                 'ps1cal', 'ra', 'dec', dbclient = None, logger = self.logger)
             match_to_PS1_kwargs['ps1cal_query'] = ps1cal_query
             
-            if use_clusters:
+            if use == "clusters":
                 self.logger.info("Matching cluster centroids with the PS1 calibrators")
                 av_x, av_y = self.compute_cluster_centroid(xname, yname)
                 
@@ -111,15 +108,18 @@ class _objtable_methods():
                 self.logger.info("updating cluster dataframe.")
                 self.gdf = self.df.groupby('clusterID', sort = False)
                 
-            elif match_with_fields:
+            elif use == "fieldid":
                 self.logger.info("Matching to PS1 cal using FIELDID and RC information")
-                matched_df = match_to_PS1cal_fields(self.df, rs_arcsec, logger=self.logger)
-                if not matched_df is None:
-                    self.df = matched_df
-                else:
-                    match_src_by_src = True
-                
-            elif match_src_by_src:
+                self.df = match_to_PS1cal_fields(
+                                                self.df, 
+                                                rs_arcsec,
+                                                ra_key=xname,
+                                                dec_key=yname, 
+                                                clean_non_matches=clean_non_matches,
+                                                ps1cal_query=ps1cal_query,
+                                                logger=self.logger)
+            elif use == "srcs":
+                    # TODO: Add logic so that if there are no clusters, or no FIELDID use the src-by-source
                     self.logger.info("Matching each of the %d sources to the PS1 cal database."%(len(self.df)))
                     
                     # do the matching
@@ -132,7 +132,7 @@ class _objtable_methods():
                     self.df = self.df.merge(
                         ps1cp_df, on = 'srcID', how='left',  suffixes=['', '_ps1'])
             else:
-                raise RuntimeError("Either use_cluster or match_src_by_src or match_with_fields has to be asserted.")
+                raise RuntimeError("Parameter 'use' must be in ['clusters', 'fieldid', 'srcs'], got %s."%use)
             
             # if requested, drop sources without PS1cp
             if clean_non_matches:

@@ -16,7 +16,7 @@ def init_catalog_query():
     return CatalogQuery.CatalogQuery(
             'ps1cal', 'ra', 'dec', dbclient = None, logger = None)
 
-def match_to_PS1cal_fields(df, rs_arcsec, ra_key='ra', dec_key='dec', fieldid_col='FIELDID',
+def match_to_PS1cal_fields(df, rs_arcsec, clean_non_matches, ra_key='ra', dec_key='dec', fieldid_col='FIELDID',
     rcid_col='RCID', col2rm = ['rcid', 'field', '_id', 'hpxid_16'], ps1cal_query = None, logger = None):
     """
         match sources in the dataframe to those in the PS1Cal database 
@@ -81,7 +81,7 @@ def match_to_PS1cal_fields(df, rs_arcsec, ra_key='ra', dec_key='dec', fieldid_co
 
     # get the calibrators for those fields and RCs
     query = {'field': { "$in": my_fields}, 'rcid': {'$in': my_rcs}}
-    proj = None #{ 'ra': 1, 'dec': 1 }
+    proj = None #{ 'ra': 1, 'dec': 1 }      # TODO: first just get the coordinates, then, for matches, get the rest.
     ps1df = pd.DataFrame(
         [src for src in ps1cal_query.src_coll.find(query, proj)])
     logger.info("querying PS1Cal database for all sources in your fields and RCs: found %d sources."%
@@ -101,11 +101,14 @@ def match_to_PS1cal_fields(df, rs_arcsec, ra_key='ra', dec_key='dec', fieldid_co
     df['_id'] = [ps1df._id[ps1id] for ps1id in closest_ps1_ids]
     df['dist2ps1'] = d2ps1.arcsec
     
+    # either remove sources with matches too far away or flag them
+    if clean_non_matches:
+        df = df[df['dist2ps1']<rs_arcsec]
+    else:
+        df.loc[df['dist2ps1']>rs_arcsec, 'dist2ps1'] = np.nan
+    
     # merge the dataframes
     df = df.merge(ps1df, on = '_id', how='left',  suffixes=['', '_ps1'])
-    
-    # flag sources with PS1 matches too far away
-    df.loc[df['dist2ps1']>rs_arcsec, 'dist2ps1'] = np.nan
     logger.info("done. Took %.2e seconds."%(time.time()-start))
     
     # remove uselsess columns and return
