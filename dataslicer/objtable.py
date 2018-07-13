@@ -200,7 +200,7 @@ class objtable(dataset_base, _objtable_methods):
 
     def calmag(self, mag_col, err_mag_col = None, calmag_col = None, zp_name = 'MAGZP', 
         clrcoeff_name = 'CLRCOEFF', zp_err = 'MAGZPUNC', clrcoeff_err = 'CLRCOUNC',
-        ps1_color1 = None, ps1_color2 = None, dropmag = False, plot = True):
+        filterid_col = 'FILTERID', ps1_color1 = None, ps1_color2 = None, dropmag = False, plot = True):
         """
             apply photometric calibration to magnitude. The formula used is
             
@@ -237,6 +237,22 @@ class objtable(dataset_base, _objtable_methods):
                 zp_err/clrcoeff_err: `str`
                     name of columns containing the error on the ZP and color coefficient.
                 
+                filterid_col: `str` or None
+                    name of the columns containing the ID of the FTZ filter. These translates
+                    to:     
+                            FILTER ID      BAND
+                                1           g
+                                2           r
+                                3           i
+                    if this argument is given, then the ps1_color and their errors are 
+                    selected accordingly to ensure that the colorcoefficient is applied
+                    correctly. In particular:
+                            
+                            ZTF BAND    PS1col1     PS1col2
+                                g           g           r
+                                r           g           r
+                                i           r           i
+                                
                 ps1_color1[2]: `str` or array-like
                     If strings, these are the names of the PS1cal magnitudes used
                     to calibrate (they should be consistent with PCOLOR).
@@ -282,6 +298,17 @@ class objtable(dataset_base, _objtable_methods):
         if not ps1_color2 is None:
             e_ps1_color2 = self.df['e_'+ps1_color2]
             ps1_color2 = self.df[ps1_color2]
+        
+        # pick the right PS1 colors depending on the filter ID
+        if not filterid_col is None:
+            self.logger.info("using FILTERID to apply the right PS1 colors depending on the ZTF band.")
+            gr_mask = np.logical_or(self.df['FILTERID'] == 1, self.df['FILTERID'] == 2)
+            ps1_color1 = self.df['gmag'].where(gr_mask, self.df['rmag'])
+            e_ps1_color1 = self.df['e_gmag'].where(gr_mask, self.df['e_rmag'])
+            ps1_color2 = self.df['rmag'].where(gr_mask, self.df['imag'])
+            e_ps1_color2 = self.df['e_rmag'].where(gr_mask, self.df['e_imag'])
+            
+        # do calibration from srcdataframe
         self.df.calmag(mag_col = mag_col,           # these are the names
                        err_mag_col = err_mag_col,
                        calmag_col = calmag_col,
