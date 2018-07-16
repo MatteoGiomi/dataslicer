@@ -337,7 +337,7 @@ class _objtable_methods():
             fig, ax = plt.subplots()
             if plot_y is None:
                 pngname = "select_clusters_hist_%s"%plot_x
-                bins=np.histogram(np.hstack((self.df[plot_x],rejected[plot_x])))[1]
+                bins=np.histogram(np.hstack((self.df[plot_x],rejected[plot_x])), bins=50)[1]
                 ax.hist(self.df[plot_x], bins=bins, label="accepted", **plt_kwargs)
                 ax.hist(rejected[plot_x], bins=bins, label="rejected", **plt_kwargs)
                 ax.set_xlabel(plot_x)
