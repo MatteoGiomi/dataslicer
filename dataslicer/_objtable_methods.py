@@ -337,8 +337,8 @@ class _objtable_methods():
             fig, ax = plt.subplots()
             if plot_y is None:
                 pngname = "select_clusters_hist_%s"%plot_x
-                ax.hist(self.df[plot_x], label = "accepted", **plt_kwargs)
-                ax.hist(rejected[plot_x], label = "rejected", **plt_kwargs)
+                h = ax.hist(self.df[plot_x], label = "accepted", **plt_kwargs)
+                ax.hist(rejected[plot_x], bins = h[1], label = "rejected", **plt_kwargs)
                 ax.set_xlabel(plot_x)
             else:
                 pngname = "select_clusters_scatter_%s_vs_%s"%(plot_x, plot_y)
