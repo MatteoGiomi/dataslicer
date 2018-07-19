@@ -70,7 +70,7 @@ def load_IRSA_meta(df, IRSA_meta_cols = ['airmass'], expid_col = 'EXPID', logger
         
         # join the dataframe
         metatable = metatable.rename(columns={'expid': expid_col})
-        df = df.merge(metatable, on = expid_col)
+        df = df.merge(metatable.drop_duplicates(), on = expid_col)
         logger.info("joined IRSA meta to dataframe. The following columns are now available: %s"%
             (", ".join(df.columns.values)))
         return df
