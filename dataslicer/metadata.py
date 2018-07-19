@@ -55,7 +55,7 @@ def load_IRSA_meta(df, IRSA_meta_cols = ['airmass'], expid_col = 'EXPID', logger
         query_str = "expid+IN+(%s)"%(",".join(expids_str))
         logger.info("querying IRSA using: %s"%query_str)
         zquery.load_metadata(kind="sci", sql_query="%s"%query_str)
-        logger.info("retrieved %d metadata"%len(zquery.metatable))
+        logger.info("retrieved %d metadata rows"%len(zquery.metatable))
 
         # select which IRSA columns to add
         if not IRSA_meta_cols is None:
@@ -70,7 +70,9 @@ def load_IRSA_meta(df, IRSA_meta_cols = ['airmass'], expid_col = 'EXPID', logger
         
         # join the dataframe
         metatable = metatable.rename(columns={'expid': expid_col})
-        df = df.merge(metatable.drop_duplicates(), on = expid_col)
+        clean_metatable = metatable[list(metatable.columns[~metatable.columns.duplicated()])]
+        clean_metatable = clean_metatable.drop_duplicates()
+        df = df.merge(clean_metatable, on = expid_col)
         logger.info("joined IRSA meta to dataframe. The following columns are now available: %s"%
             (", ".join(df.columns.values)))
         return df
