@@ -18,6 +18,7 @@ logging.basicConfig(level = logging.INFO)
 
 from dataslicer.df_utils import fits_to_df, check_col
 from dataslicer.PS1Cal_matching import match_to_PS1cal
+from dataslicer.metadata import load_IRSA_meta
 
 class srcdf(pd.DataFrame):
     """
@@ -104,6 +105,35 @@ class srcdf(pd.DataFrame):
             self = merged
         else:
             return merged
+
+
+    def add_IRSA_meta(self, IRSA_meta_cols = ['airmass'], expid_col = 'EXPID', logger = None):
+        """
+            wrapper aound dataslicer.metadata.load_IRSA_meta
+            retrieve metadata for each file from the IRSA archieve. It uses the EXPID
+            header keyword to search for the right metadata and then merge the dfs.
+            
+            Requires IRSA account and ztfquery.
+            
+            Parameters:
+            -----------
+            
+                df: `pandas.DataFrame` or `dataslicer.srcdf`
+                    dataframe-like object to which you want to add IRSA metadata.
+            
+                IRSA_meta_cols: `list`
+                    names of the IRSA metadata you want to add to the fits file metadata.
+                    In None, all the IRSA columns will be added.
+                
+                expid_col: `str`
+                    name of metadata column containing the expid.
+                
+                logger: `logging.logger`
+                    logger instance. If none, default will be used.
+        """
+        if logger is None:
+            logger = srcdf._class_logger
+        load_IRSA_meta(self, IRSA_meta_cols = IRSA_meta_cols, expid_col = expid_col, logger = logger)
 
 
     def reindex_sources(self, srcid_key = 'sourceid', logger = None):
