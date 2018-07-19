@@ -133,8 +133,8 @@ class srcdf(pd.DataFrame):
         """
         if logger is None:
             logger = srcdf._class_logger
-        load_IRSA_meta(self, IRSA_meta_cols = IRSA_meta_cols, expid_col = expid_col, logger = logger)
-
+        self = load_IRSA_meta(self, IRSA_meta_cols = IRSA_meta_cols, expid_col = expid_col, logger = logger)
+        return self
 
     def reindex_sources(self, srcid_key = 'sourceid', logger = None):
         """
