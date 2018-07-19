@@ -153,8 +153,41 @@ class _objtable_methods():
                 fig.tight_layout()
                 self.save_fig(fig, '%s_match_to_PS1cal.png'%self.name)
                 plt.close()
+
+
+    def add_bandwise_PS1mag_for_filter(self, bandwise_ps1mag_name='ps1mag_band', filterid_col='FILTERID'):
+        """
+            add a new column to the dataframe with the right PS1 magnitude depending 
+            on the value of filterid_col.
+            
+            Parameters:
+            -----------
+                
+                bandwise_ps1mag_name: `str`
+                    name of new column to be added.
+                
+                filterid_col: `str` or None
+                    name of the columns containing the ID of the FTZ filter. 
+                    The following rule applies:
+                    to:     
+                            FILTER ID      BAND
+                                1           g
+                                2           r
+                                3           i
+        """
         
+        check_col(filterid_col, self.df)
         
+        self.logger.info("adding band-wise PS1 magnitude column %s to the df depending on %s"%
+            (bandwise_ps1mag_name, filterid_col))
+        self.df.loc[self.df[filterid_col] == 1, bandwise_ps1mag_name] = self.df['gmag']
+        self.df.loc[self.df[filterid_col] == 2, bandwise_ps1mag_name] = self.df['rmag']
+        self.df.loc[self.df[filterid_col] == 3, bandwise_ps1mag_name] = self.df['imag']
+        
+        # now propagate the changes to the grouped dataframe and remember to clean up
+        self.update_gdf()
+
+
     def ps1based_outlier_rm_iqr(self, cal_mag_name, norm_mag_diff_cut, filterid_col='FILTERID', ps1mag_name=None, n_mag_bins=10, plot=True):
         """
             remove clusters based on the normalized difference between the cluster average
@@ -213,18 +246,8 @@ class _objtable_methods():
         # if filterid_col is given, use it to select the right PS1 magnitude to compare with
         cleanup, aux_ps1mag_name = False, 'aux_ps1mag'
         if not filterid_col is None:
-            check_col(filterid_col, self.df)
-            self.logger.info("using %s to select the right PS1 magnitudes to compare to."%filterid_col)
-            self.df.loc[self.df[filterid_col] == 1, aux_ps1mag_name] = self.df['gmag']
-            self.df.loc[self.df[filterid_col] == 2, aux_ps1mag_name] = self.df['rmag']
-            self.df.loc[self.df[filterid_col] == 3, aux_ps1mag_name] = self.df['imag']
-            
-#            print (self.df[[filterid_col, aux_ps1mag_name, 'gmag', 'rmag', 'gmag']])
-#            input()
-            
-            # now propagate the changes to the grouped dataframe and remember to clean up
-            self.update_gdf()
-            cleanup = True
+            self.add_bandwise_PS1mag_for_filter(aux_ps1mag_name, filterid_col)
+            cleanup = True  # remember to cleanup afterwards
             
             # now re-update the dataframe
         elif not ps1mag_name is None:
@@ -381,7 +404,7 @@ class _objtable_methods():
             else:
                 pngname = "select_clusters_scatter_%s_vs_%s"%(plot_x, plot_y)
                 ax.scatter(self.df[plot_x], self.df[plot_y], label = "accepted", **plt_kwargs)
-                ax.scatter(rejected[plot_x], rejected[plot_y], label = "accepted", **plt_kwargs)
+                ax.scatter(rejected[plot_x], rejected[plot_y], label = "rejected", **plt_kwargs)
                 ax.set_xlabel(plot_x)
                 ax.set_ylabel(plot_y)
             ax.set_title(cond)
