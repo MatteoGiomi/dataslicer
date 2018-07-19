@@ -266,8 +266,6 @@ class objtable(dataset_base, _objtable_methods):
                     and their errors is created in plotdir.
         """
         
-        self.logger.info("Applying photometric calibration.")
-        
         # see what columns are needed
         needed_cols = [mag_col, zp_name]
         if clrcoeff_name is None:

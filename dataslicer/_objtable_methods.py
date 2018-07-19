@@ -155,7 +155,7 @@ class _objtable_methods():
                 plt.close()
         
         
-    def ps1based_outlier_rm_iqr(self, cal_mag_name, ps1mag_name, norm_mag_diff_cut, n_mag_bins=10, plot=True):
+    def ps1based_outlier_rm_iqr(self, cal_mag_name, norm_mag_diff_cut, filterid_col='FILTERID', ps1mag_name=None, n_mag_bins=10, plot=True):
         """
             remove clusters based on the normalized difference between the cluster average
             magnitude and that of the associated PS1 calibrator star. The algorithm
@@ -178,12 +178,21 @@ class _objtable_methods():
                 cal_mag_name: `str`
                     name of columns with the calibrated ZTF magnitudes.
                 
-                ps1mag_name: `str`
-                    name of PS1 cal magnitude to compare to cal_mag_name.
+                filterid_col: `str` or None
+                    name of the columns containing the ID of the FTZ filter. If None, 
+                    ps1mag_name must be given. The filter ID translates in the following bands:
+                    to:     
+                            FILTER ID      BAND
+                                1           g
+                                2           r
+                                3           i
                     
                 norm_mag_diff_cut: `float`
                     cut on the normalized magnitude difference to isolate outliers
                     (norm_mag_diff > norm_mag_diff_cut) from the rest.
+                
+                ps1mag_name: `str`
+                    if filterid_col is None, name of PS1 cal magnitude to compare to cal_mag_name.
                 
                 n_mag_bins: `int`
                     number of magnitude bins to use.
@@ -201,14 +210,36 @@ class _objtable_methods():
         self.logger.info(
             "rejecting outliers based on the IQR normalized magnitude difference wrt PS1 cal")
         
-        # checks
+        # if filterid_col is given, use it to select the right PS1 magnitude to compare with
+        cleanup, aux_ps1mag_name = False, 'aux_ps1mag'
+        if not filterid_col is None:
+            check_col(filterid_col, self.df)
+            self.logger.info("using %s to select the right PS1 magnitudes to compare to."%filterid_col)
+            self.df.loc[self.df[filterid_col] == 1, aux_ps1mag_name] = self.df['gmag']
+            self.df.loc[self.df[filterid_col] == 2, aux_ps1mag_name] = self.df['rmag']
+            self.df.loc[self.df[filterid_col] == 3, aux_ps1mag_name] = self.df['imag']
+            
+#            print (self.df[[filterid_col, aux_ps1mag_name, 'gmag', 'rmag', 'gmag']])
+#            input()
+            
+            # now propagate the changes to the grouped dataframe and remember to clean up
+            self.update_gdf()
+            cleanup = True
+            
+            # now re-update the dataframe
+        elif not ps1mag_name is None:
+            self.logger.info("using PS1 magnitude from column: %s"%ps1mag_name)
+            aux_ps1mag_name = ps1mag_name
+        else:
+            raise RuntimeError("either 'ps1mag_name' of 'filterid_col' must be specified.")
+        
         self._check_for_gdf()
-        check_col([cal_mag_name, ps1mag_name], self.gdf)
+        check_col([cal_mag_name, aux_ps1mag_name], self.gdf)
         
         # create smaller df with cluster average mag and it's difference wrt ps1 cal
         start = time.time()
         mag_av = self.gdf[cal_mag_name].mean()
-        mag_diff = self.gdf[cal_mag_name].mean() - self.gdf[ps1mag_name].mean()
+        mag_diff = self.gdf[cal_mag_name].mean() - self.gdf[aux_ps1mag_name].mean()
         scatter_df = pd.concat(
                         [mag_av.rename('av_mag'),
                         mag_diff.rename('mag_diff')], axis = 1).reset_index()
@@ -262,7 +293,7 @@ class _objtable_methods():
             if len(outl_df)>0:
                 grp_outl_df = outl_df.groupby('clusterID', sort = False)
                 out_mag_av = grp_outl_df[cal_mag_name].mean()
-                out_mag_diff = grp_outl_df[cal_mag_name].mean() - grp_outl_df[ps1mag_name].mean()
+                out_mag_diff = grp_outl_df[cal_mag_name].mean() - grp_outl_df[aux_ps1mag_name].mean()
                 ax1.scatter(out_mag_av, out_mag_diff, c= 'r', marker = 'x')
                 
             # plot the bins
@@ -280,6 +311,12 @@ class _objtable_methods():
             fig.tight_layout()
             self.save_fig(fig, '%s_ps1based_outlier_rm.png'%self.name)
             plt.close()
+        
+        # remove aux_ps1_magniute
+        if cleanup:
+            self.logger.info("removing auxiliary column: %s"%aux_ps1mag_name)
+            self.df.drop(columns=[aux_ps1mag_name], inplace=True)
+            self.update_gdf()
         
         # replace the clean dfs
         self.df = clean_df
