@@ -216,4 +216,109 @@ def match_to_PS1cal(ras, decs, rs_arcsec, ids, ps1cal_query = None,
     ps1cp_df = downcast_df(pd.DataFrame(ps1cps))
     return ps1cp_df
 
+def stats(df, filter_col = 'FILTERID', ps1color_col = None, ps1mag_col = None, withzp_col = None, withcolor_col = None,
+    airmass_col = 'airmass', logger = None):
+    '''
+        This method returns some statistics about a given dataframe, such as # of calibrator stars, mean color, min magnitude in each band etc.
+        Also, the dataframe gets expanded with some useful columns if not supplied as parameter
+        
+        Pararameters:
+        -------------
 
+            df: `pd.DataFrame`
+                dataframe you're interested in
+
+            filtercol: `str`
+                name of the column in the dataframe containing the filterid (1-3)
+
+            ps1color_col: `str`
+                name of the column in the dataframe containing the PS1 color
+
+            ps1mag_col: `str`
+                name of the column in the dataframe containing the PS1 magnitude
+
+            withzp_col: `str`
+                name of the column in the dataframe containing the ZTF magnitude + zeropoint from header
+
+            withcolor_col: `str`
+                name of the column in the dataframe containing the ZTF magnitude + zeropoint from header + colorterm from header 
+
+        Returns:
+        --------
+
+            dict with the following entries:
+
+                number_of_datapoints: number of entries
+
+                number_of_stars: the number of unique stars
+
+                summed_airmass: sum over the airmass
+
+                min_magnitude_PS1: the smallest PS1 magnitude
+
+                min_magnitude_ZTF_calibrated: the smallest ZTF magnitude (after applying zeropoint and color correction)
+
+                min_magnitude_lightcurve_averages: the smallest of the lightcurve average magnitudes
+    '''
+
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    # choose the right PS1 color (according to filterid)
+    if ps1color_col is None and ps1mag_col is None:
+
+        ps1color_col = 'PS1_color'
+        ps1mag_col = 'PS1_mag'
+
+        # create auxiliary columns
+        df['PS1_color_g'] = df['gmag'].values - df['rmag'].values
+        df['PS1_color_r'] = df['gmag'].values - df['rmag'].values
+        df['PS1_color_i'] = df['rmag'].values - df['imag'].values
+
+        # select right PS1 color column using masking on FILTERID
+        gr_mask = np.logical_or(df['FILTERID'] == 1, df['FILTERID'] == 2)
+        df[ps1color_col] = df['PS1_color_g'].where(df['FILTERID'] == 1, df['PS1_color_r'])
+        df[ps1mag_col] = df['gmag'].where(df['FILTERID'] == 1, df['rmag'])
+        df[ps1color_col] = df[ps1color_col].where(gr_mask, df['PS1_color_i'])
+        df[ps1mag_col] = df[ps1mag_col].where(gr_mask, df['imag'])
+
+
+        # drop the the auxiliary columns
+        df.drop(columns = ['PS1_color_g', 'PS1_color_r', 'PS1_color_i'], inplace = True)
+
+    if withzp_col is None:
+
+        withzp_col = 'mag_with_zp'
+        df[withzp_col] = df['mag'].values + df['MAGZP'].values
+
+    if withcolor_col is None:
+
+        withcolor_col = 'mag_color_corrected'
+        df[withcolor_col] = df[withzp_col] + ( df['CLRCOEFF'] * df[ps1color_col] )
+
+    # determine number of datapoints and stars
+    datapoints_nr = df.shape[0]
+    stars_nr = len(df['_id'].unique())
+    airmass_sum = df['airmass'].sum()
+
+    # calculate lightcurve averages
+    lightcurve_ztf_avg = df.groupby('_id')[withcolor_col].mean()
+    lightcurve_ps1_avg = df.groupby('_id')[ps1mag_col].mean()
+
+    # calculate smallest magnitudes
+    min_magnitude_ps1 = max(df[ps1mag_col].values)
+    min_magnitude_ztf_calibrated = max(df[withcolor_col].values)
+    min_magnitude_lc = max(lightcurve_ztf_avg)
+
+    return_dict = {'number_of_datapoints': datapoints_nr, 'number_of_stars': stars_nr, 'summed_airmass': airmass_sum,
+    'min_magnitude_PS1': min_magnitude_ps1, 'min_magnitude_ZTF_calibrated': min_magnitude_ztf_calibrated,
+    'min_magnitude_lightcurve_averages': min_magnitude_lc}
+
+    logger.info('number of datapoints: {}'.format(datapoints_nr))
+    logger.info('number of stars: {}'.format(stars_nr))
+    logger.info('airmass summed: {:.0f}'.format(airmass_sum))
+    logger.info('smallest PS1 magnitude = {:2.2f}'.format(min_magnitude_ps1))
+    logger.info('smallest calibrated star magnitude = {:2.2f}'.format(min_magnitude_ztf_calibrated))
+    logger.info('smallest lightcurve average magnitude = {:2.2f}'.format(min_magnitude_lc))
+
+    return return_dict
