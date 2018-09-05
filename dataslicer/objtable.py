@@ -291,8 +291,6 @@ class objtable(dataset_base, _objtable_methods):
         else:
             clrcoeff = None
             clrcoeff_err = None
-            ps1_color1 = None
-            ps1_color2 = None
             e_ps1_color1 = None
             e_ps1_color2 = None
         if not clrcoeff_err is None:
