@@ -83,7 +83,7 @@ class objtable(dataset_base, _objtable_methods):
         
         # if you want, select based on metadata
         if (not target_metadata_df is None):
-            self.logger.info("using target metadata to indetify the files.")
+            self.logger.info("using target metadata to identify the files.")
             files = target_metadata_df['PATH'].values
         else:
             files = self.files
@@ -288,6 +288,13 @@ class objtable(dataset_base, _objtable_methods):
             zp_err = self.df[zp_err]
         if not clrcoeff_name is None:
             clrcoeff = self.df[clrcoeff_name]
+        else:
+            clrcoeff = None
+            clrcoeff_err = None
+            ps1_color1 = None
+            ps1_color2 = None
+            e_ps1_color1 = None
+            e_ps1_color2 = None
         if not clrcoeff_err is None:
             clrcoeff_err = self.df[clrcoeff_err]
         if not ps1_color1 is None:
