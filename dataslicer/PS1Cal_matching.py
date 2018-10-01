@@ -248,9 +248,11 @@ def stats(df, filter_col = 'FILTERID', ps1color_col = None, ps1mag_col = None, w
 
             dict with the following entries:
 
-                number_of_datapoints: number of entries
+                number_of_datapoints: number of photopoints
 
-                number_of_stars: the number of unique stars
+                number_of_stars: the number of unique calibrator stars (PS1)
+
+                number_of_exposures: the number of unique exposures
 
                 summed_airmass: sum over the airmass
 
@@ -299,6 +301,7 @@ def stats(df, filter_col = 'FILTERID', ps1color_col = None, ps1mag_col = None, w
     # determine number of datapoints and stars
     datapoints_nr = df.shape[0]
     stars_nr = len(df['_id'].unique())
+    exposures_nr = len(df['EXPID'].unique())
     airmass_sum = df['airmass'].sum()
 
     # calculate lightcurve averages
@@ -315,7 +318,8 @@ def stats(df, filter_col = 'FILTERID', ps1color_col = None, ps1mag_col = None, w
     'min_magnitude_lightcurve_averages': min_magnitude_lc}
 
     logger.info('number of datapoints: {}'.format(datapoints_nr))
-    logger.info('number of stars: {}'.format(stars_nr))
+    logger.info('number of calibrator stars: {}'.format(stars_nr))
+    logger.info('number of exposures: {}'.format(exposures_nr))
     logger.info('airmass summed: {:.0f}'.format(airmass_sum))
     logger.info('smallest PS1 magnitude = {:2.2f}'.format(min_magnitude_ps1))
     logger.info('smallest calibrated star magnitude = {:2.2f}'.format(min_magnitude_ztf_calibrated))
