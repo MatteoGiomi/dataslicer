@@ -14,7 +14,7 @@ from dataslicer.dataset_base import dataset_base
 from dataslicer.df_utils import downcast_df, check_col
 
 
-def load_IRSA_meta(df, IRSA_meta_cols = ['airmass'], expid_col = 'EXPID', logger = None):
+def load_IRSA_meta(df, IRSA_meta_cols = ['airmass'], expid_col = 'EXPID', rcid = None, logger = None):
         """
             retrieve metadata for each file from the IRSA archieve. It uses the EXPID
             header keyword to search for the right metadata and then merge the dfs.
@@ -33,6 +33,9 @@ def load_IRSA_meta(df, IRSA_meta_cols = ['airmass'], expid_col = 'EXPID', logger
                 
                 expid_col: `str`
                     name of metadata column containing the expid.
+
+                rcid: int
+                    if given, only metadata for this readout-channel will be retrieved
                 
                 logger: `logging.logger`
                     logger instance. If none, default will be used.
@@ -45,36 +48,42 @@ def load_IRSA_meta(df, IRSA_meta_cols = ['airmass'], expid_col = 'EXPID', logger
         # check which are the expid we have in this object
         check_col(expid_col, df)
         expids = pd.unique(df[expid_col])
-        logger.info("found %d unique exposures (%s) in metadata."%
-            (len(expids), expid_col))
+        logger.info("found {} unique exposures ({}) in metadata.".format(len(expids), expid_col))
         expids_str = ["%d"%expid for expid in expids]
         
         # query IRSA
         from ztfquery import query
         zquery = query.ZTFQuery()
-        query_str = "expid+IN+(%s)"%(",".join(expids_str))
-        logger.info("querying IRSA using: %s"%query_str)
+
+        if rcid is None:
+            query_str = "expid+IN+({})".format(",".join(expids_str))
+            logger.info("querying IRSA using: {}".format(query_str))
+        else:
+            query_str = "expid+IN+({}) and rcid+=+{}".format(",".join(expids_str),rcid)
+            logger.info("querying IRSA (for readout channel {}) using: {}".format(rcid, query_str))
+        
         zquery.load_metadata(kind="sci", sql_query="%s"%query_str)
-        logger.info("retrieved %d metadata rows"%len(zquery.metatable))
+        logger.info("retrieved {} metadata rows".format(len(zquery.metatable)))
+
+        print(zquery.metatable)
 
         # select which IRSA columns to add
         if not IRSA_meta_cols is None:
-            logger.info("selecting IRSA meta columns: %s"%", ".join(IRSA_meta_cols))
+            logger.info("selecting IRSA meta columns: {}".format(", ".join(IRSA_meta_cols)))
             IRSA_meta_cols.append('expid')  # you need this to join the dfs
             metatable = zquery.metatable[IRSA_meta_cols]
+            print(metatable)
         else:
             logger.info("using all IRSA meta columns.")
             metatable = zquery.metatable
-        logger.info("adding the following columns to metadata dataframe: %s"%
-            (", ".join(metatable.columns.values)))
+        logger.info("adding the following columns to metadata dataframe: {}".format(", ".join(metatable.columns.values)))
         
         # join the dataframe
         metatable = metatable.rename(columns={'expid': expid_col})
         clean_metatable = metatable[list(metatable.columns[~metatable.columns.duplicated()])]
         clean_metatable = clean_metatable.drop_duplicates()
         df = df.merge(clean_metatable, on = expid_col)
-        logger.info("joined IRSA meta to dataframe. The following columns are now available: %s"%
-            (", ".join(df.columns.values)))
+        logger.info("joined IRSA meta to dataframe. The following columns are now available: {}".format(", ".join(df.columns.values)))
         return df
         
 
