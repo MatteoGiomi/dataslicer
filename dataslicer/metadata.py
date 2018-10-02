@@ -72,7 +72,6 @@ def load_IRSA_meta(df, IRSA_meta_cols = ['airmass'], expid_col = 'EXPID', rcid =
             logger.info("selecting IRSA meta columns: {}".format(", ".join(IRSA_meta_cols)))
             IRSA_meta_cols.append('expid')  # you need this to join the dfs
             metatable = zquery.metatable[IRSA_meta_cols]
-            print(metatable)
         else:
             logger.info("using all IRSA meta columns.")
             metatable = zquery.metatable
