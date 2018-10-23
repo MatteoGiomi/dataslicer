@@ -4,7 +4,7 @@
 # utility class that will gather some (long-coded) methods of the objtable class.
 # 
 # Author: M. Giomi (matteo.giomi@desy.de)
-
+import os
 import tqdm, time, jenkspy
 import numpy as np
 import pandas as pd
@@ -186,6 +186,80 @@ class _objtable_methods():
         
         # now propagate the changes to the grouped dataframe and remember to clean up
         self.update_gdf()
+
+    def calculate_quality(self, cal_mag_name = 'cal_mag', ps1mag_name = 'p1mag_band', df_to_append = None, save_dir = None):
+        """
+            calculates the calibration bias for a given dataframe as a measure of calibration quality. It retains only PS1 matched calibrator
+            stars lying in a magnitude bin of [18.5,17.5] (calibrated instrumental magnitude, including zero point
+            correction and color correction) and is calculated for each readout channel and exposure independently. The quantity is defined as follows:
+
+                bias(readout_channel, exposure) = < abs(mag_calibrated(readout_channel, exposure) - mag_PS1) >
+                spread(readout_channel, exposure) = stddev(abs(mag_calibrated(readout_channel, exposure) - mag_PS1))
+
+            Both values are given in millimag!
+
+            Parameters:
+            -----------
+            
+                cal_mag_name: `str`
+                    name of column with the calibrated ZTF magnitudes.
+
+                ps1mag_name: `str`
+                    name of PS1 cal magnitude column to compare to cal_mag_name.
+
+                df_to_append: `pandas Dataframe`
+                    if one wishes to append the results to an existing dataframe, it can be passed here.
+
+                save_dir: 'str'
+                    name of the directory the resulting dataframe should be saved to as csv. If None is given, the
+                    dataframe will only be returned, but not saved
+
+            Returns:
+            --------
+                
+                pandas.DataFrame with calibration quality for each readout channel and exposure
+                The DataFrame contains the following columns: EXPID, FILTERID, FIELDID, OBSMJD, RCID, bias, spred, # calibrators
+        """
+
+        self.logger.info('calculating quality of calibration for given dataframe')
+
+        if df_to_append is None:
+            quality_df = pd.DataFrame(columns = ['EXPID', 'FIELDID', 'OBSMJD', 'RCID', 'bias', '# calibrators', 'spread'])
+        else:
+            quality_df = df_to_append
+
+        # cut to magnitude bin
+        df_temp = self.df
+        df_temp.drop(df_temp[df_temp[cal_mag_name] < 17.5].index, inplace = True)
+        df_temp.drop(df_temp[df_temp[cal_mag_name] > 18.5].index, inplace = True)
+
+        # calculate absolute magnitude difference between ZTF measurement and PS1 calibrators
+        # covert to millimag
+        df_temp['abs_millimag_diff'] = np.abs(df_temp[cal_mag_name] - df_temp[ps1mag_name])*1000
+
+        grouped = df_temp.groupby(by = ['OBSMJD', 'EXPID', 'FIELDID', 'FILTERID'], group_keys = True)
+
+        ## calculate mean, stddev and number of calibrator stars for each RC and exposure
+        def cutfunc1(x, y):
+            mask = (x['RCID'] == y)
+            return pd.DataFrame([{'bias': x.abs_millimag_diff[mask].abs().mean(), 'spread': x.abs_millimag_diff[mask].std(), 
+                '# calibrators': x.abs_millimag_diff[mask].count(), 'RCID': y}])
+
+        for rcid in df_temp['RCID'].unique():
+            grouped_cut = grouped.apply(cutfunc1, rcid).reset_index(level = ['OBSMJD', 'EXPID', 'FIELDID', 'FILTERID'])
+            quality_df = pd.concat([quality_df, grouped_cut], sort = True)
+        quality_df.sort_values(by = ['EXPID', 'RCID'], inplace = True)
+        quality_df.reset_index(drop = True, inplace = True)
+
+        if save_dir:
+            save_file = os.path.join(save_dir, 'quality.csv')
+            quality_df.to_csv(save_file)
+            self.logger.info('quality of calibration has been calculated and saved to {}'.format(save_file))
+
+        else:
+            self.logger.info('quality of calibration has been calculated')
+
+        return quality_df
 
 
     def ps1based_outlier_rm_iqr(self, cal_mag_name, norm_mag_diff_cut, filterid_col='FILTERID', ps1mag_name=None, n_mag_bins=10, plot=True):
