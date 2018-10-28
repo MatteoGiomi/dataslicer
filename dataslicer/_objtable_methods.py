@@ -224,7 +224,7 @@ class _objtable_methods():
         self.logger.info('calculating quality of calibration for given dataframe')
 
         if df_to_append is None:
-            quality_df = pd.DataFrame(columns = ['EXPID', 'FIELDID', 'OBSMJD', 'RCID', 'bias', '# calibrators', 'spread'])
+            quality_df = pd.DataFrame(columns = ['EXPID', 'FIELDID', 'OBSMJD', 'RCID', 'bias', 'median', '# calibrators', 'spread'])
         else:
             quality_df = df_to_append
 
@@ -243,7 +243,7 @@ class _objtable_methods():
         def cutfunc1(x, y):
             mask = (x['RCID'] == y)
             return pd.DataFrame([{'bias': x.abs_millimag_diff[mask].abs().mean(), 'spread': x.abs_millimag_diff[mask].std(), 
-                '# calibrators': x.abs_millimag_diff[mask].count(), 'RCID': y}])
+                'median': x.abs_millimag_diff[mask].abs().median(), '# calibrators': x.abs_millimag_diff[mask].count(), 'RCID': y}])
 
         for rcid in df_temp['RCID'].unique():
             grouped_cut = grouped.apply(cutfunc1, rcid).reset_index(level = ['OBSMJD', 'EXPID', 'FIELDID', 'FILTERID'])
