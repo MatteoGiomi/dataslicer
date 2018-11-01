@@ -317,13 +317,12 @@ class _objtable_methods():
         self.logger.info(
             "rejecting outliers based on the IQR normalized magnitude difference wrt PS1 cal")
         
-        # if filterid_col is given, use it to select the right PS1 magnitude to compare with
+        # if filterid_col is given and it is present in the dataframre
+        # use it to select the right PS1 magnitude to compare with
         cleanup, aux_ps1mag_name = False, 'aux_ps1mag'
-        if not filterid_col is None:
+        if filterid_col in self.df.columns.values:
             self.add_bandwise_PS1mag_for_filter(aux_ps1mag_name, filterid_col)
             cleanup = True  # remember to cleanup afterwards
-            
-            # now re-update the dataframe
         elif not ps1mag_name is None:
             self.logger.info("using PS1 magnitude from column: %s"%ps1mag_name)
             aux_ps1mag_name = ps1mag_name

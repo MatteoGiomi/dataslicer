@@ -303,7 +303,8 @@ class objtable(dataset_base, _objtable_methods):
             ps1_color2 = self.df[ps1_color2]
         
         # pick the right PS1 colors depending on the filter ID
-        if not filterid_col is None:
+#        if not filterid_col is None:
+        if filterid_col in self.df.columns.values:
             self.logger.info("using FILTERID to apply the right PS1 colors depending on the ZTF band.")
             gr_mask = np.logical_or(self.df['FILTERID'] == 1, self.df['FILTERID'] == 2)
             ps1_color1 = self.df['gmag'].where(gr_mask, self.df['rmag'])
