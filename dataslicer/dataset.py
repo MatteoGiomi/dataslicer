@@ -74,7 +74,7 @@ class dataset(dataset_base):
         
         self.metadata = metadata(self.name, self.datadir, self.fext, self.logger)
         if metadata_file is None:
-            metadata_file = os.path.join(self.datadir, self.name+"_metadata.csv")
+            metadata_file = os.path.join(self.datadir, self.name+"_metadata.csv.gz")
         
         # check for the file and if the df all has the columns you requested, else reload it.
         read_from_fits = True
@@ -119,7 +119,7 @@ class dataset(dataset_base):
         """
         self.objtable = objtable(self.name, self.datadir, self.fext, self.logger)
         if objtable_file is None:
-            objtable_file = os.path.join(self.datadir, self.name+"_objtable.csv")
+            objtable_file = os.path.join(self.datadir, self.name+"_objtable.csv.gz")
         
         # check for the file and if the df all has the columns you requested, else reload it.
         read_from_fits = True

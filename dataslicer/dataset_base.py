@@ -124,8 +124,10 @@ class dataset_base():
             tagname = ""
         
         if fname is None:
-            fname = os.path.join(self.datadir, self.name+"%s.csv"%tagname)
+            fname = os.path.join(self.datadir, self.name+"%s.csv.gz"%tagname)
         to_csv_args['path_or_buf'] = fname
+        if to_csv_args.get('index', None) is None:
+            to_csv_args['index'] = False
         if hasattr(self, 'df'):
             self.logger.info("saving %s dataframe to csv file: %s"%(tag, fname))
             true_args = select_kwargs(pd.DataFrame.to_csv, **to_csv_args)
@@ -161,7 +163,7 @@ class dataset_base():
             tagname = ""
             
         if fname is None:
-            fname = os.path.join(self.datadir, self.name+"%s.csv"%tagname)
+            fname = os.path.join(self.datadir, self.name+"%s.csv.gz"%tagname)
         read_csv_args['filepath_or_buffer'] = fname
         self.logger.info("reading %s dataframe from csv file: %s"%(tag, fname))
         true_args = select_kwargs(pd.read_csv, **read_csv_args)
