@@ -90,7 +90,7 @@ class dataset(dataset_base):
         if read_from_fits:
             self.metadata.load_header_meta(**args)
             if meta_tocsv:
-                self.metadata.to_csv(**args)
+                self.metadata.to_csv(fname=metadata_file, **args)
 
 
     def load_objtable(self, objtable_file = None, force_reload = False, obj_tocsv = True, **args):

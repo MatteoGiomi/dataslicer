@@ -320,12 +320,12 @@ class _objtable_methods():
         # if filterid_col is given and it is present in the dataframre
         # use it to select the right PS1 magnitude to compare with
         cleanup, aux_ps1mag_name = False, 'aux_ps1mag'
-        if filterid_col in self.df.columns.values:
-            self.add_bandwise_PS1mag_for_filter(aux_ps1mag_name, filterid_col)
-            cleanup = True  # remember to cleanup afterwards
-        elif not ps1mag_name is None:
+        if not ps1mag_name is None:
             self.logger.info("using PS1 magnitude from column: %s"%ps1mag_name)
             aux_ps1mag_name = ps1mag_name
+        elif filterid_col in self.df.columns.values:
+            self.add_bandwise_PS1mag_for_filter(aux_ps1mag_name, filterid_col)
+            cleanup = True  # remember to cleanup afterwards
         else:
             raise RuntimeError("either 'ps1mag_name' of 'filterid_col' must be specified.")
         
@@ -393,7 +393,7 @@ class _objtable_methods():
                 ax1.scatter(out_mag_av, out_mag_diff, c= 'r', marker = 'x')
                 
             # plot the bins
-            ax1.errorbar(bin_x, bin_y, xerr = 0, yerr = iqr.values, c ='r')
+            ax1.errorbar(bin_x.values, bin_y.values, xerr = 0, yerr = iqr.values, c ='r')
             for x in mag_av_bins: ax1.axvline(x, c = 'k', lw = 0.7, ls = '--')
             
             cb = plt.colorbar(sc, ax = ax1)
