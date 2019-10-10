@@ -13,7 +13,7 @@ def select_kwargs(func, **kwargs):
     """
         return the subset of kwargs that are accepted by the function func
     """
-    return {k:v for k, v in kwargs.items() if k in inspect.getargspec(func).args}
+    return {k:v for k, v in kwargs.items() if k in inspect.getfullargspec(func).args}
 
 
 class dataset_base():
